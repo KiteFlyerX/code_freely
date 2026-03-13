@@ -24,7 +24,6 @@ from .views.bug_view import BugView
 from .views.review_view import ReviewView
 from .views.knowledge_view import KnowledgeView
 from .views.settings_view import SettingsView
-from .views.provider_view import ProviderManagementView
 
 
 class WorkerSignals(QObject):
@@ -54,7 +53,6 @@ class MainWindow(FluentWindow):
         self.bug_view = BugView()
         self.review_view = ReviewView()
         self.knowledge_view = KnowledgeView()
-        self.provider_view = ProviderManagementView()
         self.settings_view = SettingsView()
 
         # 添加到栈式窗口
@@ -72,9 +70,6 @@ class MainWindow(FluentWindow):
         )
         self.addSubInterface(
             self.knowledge_view, FluentIcon.DOCUMENT, "知识库"
-        )
-        self.addSubInterface(
-            self.provider_view, FluentIcon.DEVELOPER_TOOLS, "提供商管理"
         )
         self.addSubInterface(
             self.settings_view, FluentIcon.SETTING, "设置",

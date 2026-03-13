@@ -724,47 +724,26 @@ class CodeTraceAIWindow(QMainWindow):
                     QMessageBox.critical(None, "错误", f"切换失败: {e}")
 
     def _on_commit_code(self):
-        """提交代码功能"""
+        """提交代码功能 - 支持 Git 和 SVN"""
         try:
-            # 检查是否在 git 仓库中
-            result = subprocess.run(
-                ["git", "rev-parse", "--is-inside-work-tree"],
-                capture_output=True,
-                text=True,
-                cwd=str(self.current_work_dir)
-            )
+            # 检测 VCS 类型
+            vcs_type = self._detect_vcs()
 
-            if result.returncode != 0:
+            if vcs_type is None:
                 QMessageBox.warning(
                     None,
-                    "不是 Git 仓库",
-                    f"当前目录不是 Git 仓库:\n{self.current_work_dir}\n\n请先初始化 Git 仓库。"
+                    "不是版本控制仓库",
+                    f"当前目录不是 Git 或 SVN 仓库:\n{self.current_work_dir}\n\n请先初始化版本控制仓库。"
                 )
                 return
 
-            # 获取已修改文件
-            status_result = subprocess.run(
-                ["git", "status", "--short"],
-                capture_output=True,
-                text=True,
-                cwd=str(self.current_work_dir)
-            )
-
-            modified_files = status_result.stdout.strip().split('\n') if status_result.stdout.strip() else []
-
-            # 获取未跟踪文件
-            untracked_result = subprocess.run(
-                ["git", "ls-files", "--others", "--exclude-standard"],
-                capture_output=True,
-                text=True,
-                cwd=str(self.current_work_dir)
-            )
-
-            untracked_files = untracked_result.stdout.strip().split('\n') if untracked_result.stdout.strip() else []
-
-            # 过滤掉空行
-            modified_files = [f for f in modified_files if f]
-            untracked_files = [f for f in untracked_files if f]
+            # 根据 VCS 类型获取文件状态
+            if vcs_type == "git":
+                modified_files, untracked_files = self._get_git_status()
+                vcs_name = "Git"
+            else:  # svn
+                modified_files, untracked_files = self._get_svn_status()
+                vcs_name = "SVN"
 
             if not modified_files and not untracked_files:
                 QMessageBox.information(
@@ -778,10 +757,13 @@ class CodeTraceAIWindow(QMainWindow):
             from PySide6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QCheckBox, QDialogButtonBox, QScrollArea, QWidget
 
             dialog = QDialog()
-            dialog.setWindowTitle("提交代码")
+            dialog.setWindowTitle(f"提交代码 ({vcs_name})")
             dialog.setMinimumWidth(700)
             dialog.setMinimumHeight(500)
             dialog_layout = QVBoxLayout(dialog)
+
+            # 显示 VCS 类型
+            dialog_layout.addWidget(QLabel(f"版本控制系统: {vcs_name}"))
 
             # 已修改文件
             if modified_files:
@@ -823,8 +805,9 @@ class CodeTraceAIWindow(QMainWindow):
             commit_msg_edit.setPlaceholderText("输入提交消息，描述本次更改...")
             dialog_layout.addWidget(commit_msg_edit)
 
-            # 推送选项
-            push_checkbox = QCheckBox("提交后推送到远程仓库")
+            # 推送/更新选项
+            push_label = "提交后推送到远程仓库 (Git)" if vcs_type == "git" else "提交前更新代码 (SVN)"
+            push_checkbox = QCheckBox(push_label)
             dialog_layout.addWidget(push_checkbox)
 
             # 按钮
@@ -843,102 +826,17 @@ class CodeTraceAIWindow(QMainWindow):
                 QMessageBox.warning(None, "提示", "请输入提交消息")
                 return
 
-            # 添加已修改的文件
-            if modified_files:
-                self.chat_area.append(f"\n[系统] 正在添加已修改的文件...")
-
-            # 添加选中新增的文件
-            selected_untracked = []
-            if hasattr(self, 'untracked_checkboxes'):
-                for checkbox in self.untracked_checkboxes:
-                    if checkbox.isChecked():
-                        selected_untracked.append(checkbox.text())
-
-            if selected_untracked:
-                self.chat_area.append(f"[系统] 正在添加 {len(selected_untracked)} 个新增文件...")
-
-            # 执行 git add
-            all_files_to_add = modified_files + selected_untracked
-
-            if all_files_to_add:
-                # 逐个添加文件
-                for file_path in all_files_to_add:
-                    add_result = subprocess.run(
-                        ["git", "add", file_path],
-                        capture_output=True,
-                        text=True,
-                        cwd=str(self.current_work_dir)
-                    )
-
-                    if add_result.returncode != 0:
-                        QMessageBox.critical(
-                            None,
-                            "添加文件失败",
-                            f"无法添加文件 {file_path}:\n{add_result.stderr}"
-                        )
-                        return
-
-            # 执行 git commit
-            self.chat_area.append(f"[系统] 正在提交更改...")
-
-            commit_result = subprocess.run(
-                ["git", "commit", "-m", commit_msg],
-                capture_output=True,
-                text=True,
-                cwd=str(self.current_work_dir)
-            )
-
-            if commit_result.returncode != 0:
-                QMessageBox.critical(
-                    None,
-                    "提交失败",
-                    f"Git commit 失败:\n{commit_result.stderr}"
-                )
-                return
-
-            self.chat_area.append(f"[系统] 提交成功！")
-            self.chat_area.append(f"[系统] 提交消息: {commit_msg}")
-
-            if len(selected_untracked) > 0:
-                self.chat_area.append(f"[系统] 包含 {len(selected_untracked)} 个新增文件")
-
-            # 检查是否需要推送
-            if push_checkbox.isChecked():
-                self.chat_area.append(f"[系统] 正在推送到远程仓库...")
-
-                push_result = subprocess.run(
-                    ["git", "push"],
-                    capture_output=True,
-                    text=True,
-                    cwd=str(self.current_work_dir)
-                )
-
-                if push_result.returncode != 0:
-                    self.chat_area.append(f"[系统] 推送失败: {push_result.stderr}")
-                    QMessageBox.warning(
-                        None,
-                        "推送失败",
-                        f"已提交到本地，但推送失败:\n{push_result.stderr}"
-                    )
-                else:
-                    self.chat_area.append(f"[系统] 推送成功！")
-                    QMessageBox.information(
-                        None,
-                        "提交成功",
-                        f"代码已提交并推送到远程仓库\n提交消息: {commit_msg}"
-                    )
-            else:
-                QMessageBox.information(
-                    None,
-                    "提交成功",
-                    f"代码已提交到本地仓库\n提交消息: {commit_msg}\n\n你可以稍后手动推送。"
-                )
+            # 执行提交
+            if vcs_type == "git":
+                self._commit_git(modified_files, untracked_files, commit_msg, push_checkbox.isChecked())
+            else:  # svn
+                self._commit_svn(modified_files, untracked_files, commit_msg, push_checkbox.isChecked())
 
         except FileNotFoundError:
             QMessageBox.warning(
                 None,
-                "Git 未安装",
-                "未找到 Git 命令。\n请安装 Git 后再使用此功能。"
+                "版本控制工具未安装",
+                "未找到 Git 或 SVN 命令。\n请安装相应的版本控制工具后再使用此功能。"
             )
         except Exception as e:
             QMessageBox.critical(
@@ -946,6 +844,262 @@ class CodeTraceAIWindow(QMainWindow):
                 "操作失败",
                 f"提交代码时发生错误:\n{str(e)}"
             )
+
+    def _detect_vcs(self):
+        """检测当前目录的版本控制系统类型"""
+        # 检查 Git
+        git_result = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            capture_output=True,
+            text=True,
+            cwd=str(self.current_work_dir)
+        )
+        if git_result.returncode == 0:
+            return "git"
+
+        # 检查 SVN
+        svn_result = subprocess.run(
+            ["svn", "info"],
+            capture_output=True,
+            text=True,
+            cwd=str(self.current_work_dir)
+        )
+        if svn_result.returncode == 0:
+            return "svn"
+
+        return None
+
+    def _get_git_status(self):
+        """获取 Git 状态"""
+        # 获取已修改文件
+        status_result = subprocess.run(
+            ["git", "status", "--short"],
+            capture_output=True,
+            text=True,
+            cwd=str(self.current_work_dir)
+        )
+        modified_files = status_result.stdout.strip().split('\n') if status_result.stdout.strip() else []
+
+        # 获取未跟踪文件
+        untracked_result = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard"],
+            capture_output=True,
+            text=True,
+            cwd=str(self.current_work_dir)
+        )
+        untracked_files = untracked_result.stdout.strip().split('\n') if untracked_result.stdout.strip() else []
+
+        # 过滤掉空行
+        modified_files = [f for f in modified_files if f]
+        untracked_files = [f for f in untracked_files if f]
+
+        return modified_files, untracked_files
+
+    def _get_svn_status(self):
+        """获取 SVN 状态"""
+        status_result = subprocess.run(
+            ["svn", "status"],
+            capture_output=True,
+            text=True,
+            cwd=str(self.current_work_dir)
+        )
+
+        lines = status_result.stdout.strip().split('\n') if status_result.stdout.strip() else []
+        modified_files = []
+        untracked_files = []
+
+        for line in lines:
+            if not line:
+                continue
+            # SVN status 格式: "M       file.py" 或 "?       newfile.py"
+            status = line[0] if line else ''
+            file_path = line[8:] if len(line) > 8 else line  # 跳过状态字符和空格
+
+            if status == 'M':  # 已修改
+                modified_files.append(file_path)
+            elif status == '?':  # 未跟踪
+                untracked_files.append(file_path)
+            elif status == 'A':  # 已添加（待提交）
+                modified_files.append(f"{file_path} (已添加)")
+
+        return modified_files, untracked_files
+
+    def _commit_git(self, modified_files, untracked_files, commit_msg, push_after):
+        """执行 Git 提交"""
+        # 添加选中新增的文件
+        selected_untracked = []
+        if hasattr(self, 'untracked_checkboxes'):
+            for checkbox in self.untracked_checkboxes:
+                if checkbox.isChecked():
+                    selected_untracked.append(checkbox.text())
+
+        # 添加已修改的文件
+        if modified_files:
+            self.chat_area.append(f"\n[系统] 正在添加已修改的文件...")
+
+        if selected_untracked:
+            self.chat_area.append(f"[系统] 正在添加 {len(selected_untracked)} 个新增文件...")
+
+        # 执行 git add
+        all_files_to_add = modified_files + selected_untracked
+
+        if all_files_to_add:
+            # 逐个添加文件
+            for file_path in all_files_to_add:
+                # 提取文件名（去掉 Git 状态前缀）
+                if ' ' in file_path:
+                    file_path = file_path.split(' ', 1)[1]
+
+                add_result = subprocess.run(
+                    ["git", "add", file_path],
+                    capture_output=True,
+                    text=True,
+                    cwd=str(self.current_work_dir)
+                )
+
+                if add_result.returncode != 0:
+                    QMessageBox.critical(
+                        None,
+                        "添加文件失败",
+                        f"无法添加文件 {file_path}:\n{add_result.stderr}"
+                    )
+                    return
+
+        # 执行 git commit
+        self.chat_area.append(f"[系统] 正在提交更改...")
+
+        commit_result = subprocess.run(
+            ["git", "commit", "-m", commit_msg],
+            capture_output=True,
+            text=True,
+            cwd=str(self.current_work_dir)
+        )
+
+        if commit_result.returncode != 0:
+            QMessageBox.critical(
+                None,
+                "提交失败",
+                f"Git commit 失败:\n{commit_result.stderr}"
+            )
+            return
+
+        self.chat_area.append(f"[系统] 提交成功！")
+        self.chat_area.append(f"[系统] 提交消息: {commit_msg}")
+
+        if len(selected_untracked) > 0:
+            self.chat_area.append(f"[系统] 包含 {len(selected_untracked)} 个新增文件")
+
+        # 检查是否需要推送
+        if push_after:
+            self.chat_area.append(f"[系统] 正在推送到远程仓库...")
+
+            push_result = subprocess.run(
+                ["git", "push"],
+                capture_output=True,
+                text=True,
+                cwd=str(self.current_work_dir)
+            )
+
+            if push_result.returncode != 0:
+                self.chat_area.append(f"[系统] 推送失败: {push_result.stderr}")
+                QMessageBox.warning(
+                    None,
+                    "推送失败",
+                    f"已提交到本地，但推送失败:\n{push_result.stderr}"
+                )
+            else:
+                self.chat_area.append(f"[系统] 推送成功！")
+                QMessageBox.information(
+                    None,
+                    "提交成功",
+                    f"代码已提交并推送到远程仓库\n提交消息: {commit_msg}"
+                )
+        else:
+            QMessageBox.information(
+                None,
+                "提交成功",
+                f"代码已提交到本地仓库\n提交消息: {commit_msg}\n\n你可以稍后手动推送。"
+            )
+
+    def _commit_svn(self, modified_files, untracked_files, commit_msg, update_before):
+        """执行 SVN 提交"""
+        # 添加选中新增的文件
+        selected_untracked = []
+        if hasattr(self, 'untracked_checkboxes'):
+            for checkbox in self.untracked_checkboxes:
+                if checkbox.isChecked():
+                    selected_untracked.append(checkbox.text())
+
+        # 先更新（如果选择）
+        if update_before:
+            self.chat_area.append(f"\n[系统] 正在更新代码...")
+
+            update_result = subprocess.run(
+                ["svn", "update"],
+                capture_output=True,
+                text=True,
+                cwd=str(self.current_work_dir)
+            )
+
+            if update_result.returncode != 0:
+                self.chat_area.append(f"[系统] 更新失败: {update_result.stderr}")
+                QMessageBox.warning(
+                    None,
+                    "更新失败",
+                    f"更新失败，是否继续提交？\n{update_result.stderr}"
+                )
+            else:
+                self.chat_area.append(f"[系统] 更新完成")
+
+        # 添加新增的文件
+        if selected_untracked:
+            self.chat_area.append(f"[系统] 正在添加 {len(selected_untracked)} 个新增文件...")
+
+            for file_path in selected_untracked:
+                add_result = subprocess.run(
+                    ["svn", "add", file_path],
+                    capture_output=True,
+                    text=True,
+                    cwd=str(self.current_work_dir)
+                )
+
+                if add_result.returncode != 0:
+                    QMessageBox.critical(
+                        None,
+                        "添加文件失败",
+                        f"无法添加文件 {file_path}:\n{add_result.stderr}"
+                    )
+                    return
+
+        # 执行 svn commit
+        self.chat_area.append(f"[系统] 正在提交更改...")
+
+        commit_result = subprocess.run(
+            ["svn", "commit", "-m", commit_msg],
+            capture_output=True,
+            text=True,
+            cwd=str(self.current_work_dir)
+        )
+
+        if commit_result.returncode != 0:
+            QMessageBox.critical(
+                None,
+                "提交失败",
+                f"SVN commit 失败:\n{commit_result.stderr}"
+            )
+            return
+
+        self.chat_area.append(f"[系统] 提交成功！")
+        self.chat_area.append(f"[系统] 提交消息: {commit_msg}")
+
+        if len(selected_untracked) > 0:
+            self.chat_area.append(f"[系统] 包含 {len(selected_untracked)} 个新增文件")
+
+        QMessageBox.information(
+            None,
+            "提交成功",
+            f"代码已提交到 SVN 仓库\n提交消息: {commit_msg}"
+        )
 
     def create_settings_page(self):
         """创建设置页面"""

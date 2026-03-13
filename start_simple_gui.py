@@ -382,7 +382,7 @@ class CodeTraceAIWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("CodeTraceAI - AI 编程辅助与知识沉淀工具")
+        self.setWindowTitle("CodeTraceAI - AI 编程辅助工具")
         self.setMinimumSize(1000, 700)
 
         # 当前工作目录

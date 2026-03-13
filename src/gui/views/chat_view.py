@@ -3,21 +3,44 @@
 AI 对话界面
 """
 from typing import Optional
-from PySide6.QtCore import Qt, Signal, QThread, QObject
+from PySide6.QtCore import Qt, Signal, QThread, QObject, QEvent
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
     QFrame, QLabel, QSizePolicy, QApplication
 )
-from PySide6.QtGui import QTextDocument, QTextCursor
+from PySide6.QtGui import QTextDocument, QTextCursor, QKeySequence, QShortcut
 from qfluentwidgets import (
     TextEdit, PlainTextEdit, PushButton,
     ComboBox, BodyLabel, StrongBodyLabel, ScrollArea,
     CardWidget, SimpleCardWidget, InfoBar, InfoBarPosition
 )
 
-from ...services import conversation_service, config_service
+from ...services import (
+    conversation_service, config_service,
+    provider_manager, get_ai_client
+)
 from ...database import get_db_session
 from ...database.repositories import MessageRepository
+
+
+class MessageEdit(PlainTextEdit):
+    """支持回车发送的消息输入框"""
+
+    send_requested = Signal()
+
+    def keyPressEvent(self, event):
+        """处理按键事件"""
+        # Ctrl+Enter 或 Shift+Enter 发送（允许换行）
+        if (event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter):
+            if event.modifiers() & (Qt.ControlModifier | Qt.ShiftModifier):
+                # 换行
+                super().keyPressEvent(event)
+            else:
+                # 发送消息
+                self.send_requested.emit()
+                return
+        else:
+            super().keyPressEvent(event)
 
 
 class ChatWorker(QObject):
@@ -181,28 +204,42 @@ class ChatView(QWidget):
         layout = QVBoxLayout(container)
         layout.setContentsMargins(16, 16, 16, 16)
 
-        # 输入框
-        self.input_edit = PlainTextEdit()
-        self.input_edit.setPlaceholderText("输入你的问题或指令...")
+        # 输入框 - 使用自定义 MessageEdit 支持回车发送
+        self.input_edit = MessageEdit()
+        self.input_edit.setPlaceholderText("输入你的问题或指令... (按 Enter 发送，Ctrl+Enter 换行)")
         self.input_edit.setMaximumHeight(120)
         self.input_edit.setTabChangesFocus(True)
+        self.input_edit.send_requested.connect(self._send_message)
         layout.addWidget(self.input_edit)
 
         # 按钮区域
         button_layout = QHBoxLayout()
 
+        # 提示标签
+        self.status_label = BodyLabel("")
+        self.status_label.setStyleSheet("color: #888;")
+        button_layout.addWidget(self.status_label)
+
+        button_layout.addStretch()
+
         self.send_btn = PushButton("发送")
         self.send_btn.clicked.connect(self._send_message)
 
-        button_layout.addStretch()
         button_layout.addWidget(self.send_btn)
 
         layout.addLayout(button_layout)
+
+        # 检查提供商配置
+        self._check_provider_config()
 
         return container
 
     def _new_chat(self):
         """新建对话"""
+        # 先检查提供商配置
+        if not self._check_provider_config():
+            return
+
         # 创建新对话
         title = "新对话"
         self.conversation_id = conversation_service.create_conversation(
@@ -223,6 +260,60 @@ class ChatView(QWidget):
             parent=self
         )
 
+    def _check_provider_config(self) -> bool:
+        """检查提供商配置"""
+        try:
+            from ...database import init_database
+            init_database()
+
+            provider = provider_manager.get_active_provider()
+            if not provider:
+                self.status_label.setText("未配置提供商")
+                self.status_label.setStyleSheet("color: orange;")
+                InfoBar.warning(
+                    title="未配置提供商",
+                    content="请先在'提供商管理'页面配置 AI 提供商和 API 密钥",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=5000,
+                    parent=self
+                )
+                return False
+
+            if not provider.api_key or provider.api_key.startswith("test"):
+                self.status_label.setText("API 密钥无效")
+                self.status_label.setStyleSheet("color: orange;")
+                InfoBar.warning(
+                    title="API 密钥未配置",
+                    content=f"请为提供商 '{provider.name}' 配置有效的 API 密钥",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=5000,
+                    parent=self
+                )
+                return False
+
+            # 配置有效
+            self.status_label.setText(f"活动: {provider.name} ({provider.model})")
+            self.status_label.setStyleSheet("color: green;")
+            return True
+
+        except Exception as e:
+            self.status_label.setText("配置检查失败")
+            self.status_label.setStyleSheet("color: red;")
+            InfoBar.error(
+                title="配置检查失败",
+                content=str(e),
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self
+            )
+            return False
+
     def _send_message(self):
         """发送消息"""
         if self._is_processing:
@@ -232,9 +323,17 @@ class ChatView(QWidget):
         if not content:
             return
 
+        # 检查提供商配置
+        if not self._check_provider_config():
+            return
+
         # 如果没有对话，先创建
         if self.conversation_id is None:
+            if not self._check_provider_config():
+                return
             self._new_chat()
+            if self.conversation_id is None:
+                return
 
         # 添加用户消息气泡
         self._add_message_bubble("user", content)
@@ -271,15 +370,50 @@ class ChatView(QWidget):
 
     def _on_error(self, error: str):
         """错误处理"""
-        InfoBar.error(
-            title="请求失败",
-            content=error,
-            orient=Qt.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=5000,
-            parent=self
-        )
+        # 分析错误类型并提供更友好的提示
+        error_msg = str(error)
+
+        if "401" in error_msg or "authentication" in error_msg.lower() or "api key" in error_msg.lower():
+            provider = provider_manager.get_active_provider()
+            InfoBar.error(
+                title="API 密钥无效",
+                content=f"提供商 '{provider.name if provider else '未知'}' 的 API 密钥无效或已过期。请在'提供商管理'页面更新。",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=8000,
+                parent=self
+            )
+        elif "timeout" in error_msg.lower():
+            InfoBar.error(
+                title="请求超时",
+                content="AI 服务响应超时，请检查网络连接或稍后重试。",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self
+            )
+        elif "rate limit" in error_msg.lower():
+            InfoBar.error(
+                title="请求频率限制",
+                content="API 请求过于频繁，请稍后再试。",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self
+            )
+        else:
+            InfoBar.error(
+                title="请求失败",
+                content=error_msg[:200] + "..." if len(error_msg) > 200 else error_msg,
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self
+            )
 
     def _on_finished(self):
         """完成处理"""

@@ -35,6 +35,20 @@ from .knowledge_service import (
     KnowledgeService,
     knowledge_service,
 )
+from .provider_service import (
+    ProviderType,
+    ProviderConfig,
+    ProviderPreset,
+    ProviderManager,
+    provider_manager,
+    PROVIDER_PRESETS,
+)
+from .ai_client_factory import (
+    AIClientFactory,
+    ai_client_factory,
+    get_ai_client,
+    create_ai_client,
+)
 
 # 从 models 导入枚举类型
 from ..models import BugStatus, ReviewStatus
@@ -63,6 +77,16 @@ __all__ = [
     "KnowledgeStats",
     "KnowledgeService",
     "knowledge_service",
+    "ProviderType",
+    "ProviderConfig",
+    "ProviderPreset",
+    "ProviderManager",
+    "provider_manager",
+    "PROVIDER_PRESETS",
+    "AIClientFactory",
+    "ai_client_factory",
+    "get_ai_client",
+    "create_ai_client",
     "BugStatus",
     "ReviewStatus",
 ]

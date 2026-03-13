@@ -25,12 +25,21 @@ class ClaudeAI(BaseAI):
         "claude-3-5-haiku-20241022": "claude-3-5-haiku-20241022",
     }
 
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-6", **kwargs):
+    def __init__(self, api_key: str, model: str = "claude-sonnet-4-6", base_url: str = None, **kwargs):
         super().__init__(api_key, model, **kwargs)
 
+        # 保存 base_url
+        self.base_url = base_url
+
         # 初始化同步和异步客户端
-        self.client = Anthropic(api_key=api_key)
-        self.async_client = AsyncAnthropic(api_key=api_key)
+        if base_url:
+            # 使用自定义端点（中转服务）
+            self.client = Anthropic(api_key=api_key, base_url=base_url)
+            self.async_client = AsyncAnthropic(api_key=api_key, base_url=base_url)
+        else:
+            # 使用官方端点
+            self.client = Anthropic(api_key=api_key)
+            self.async_client = AsyncAnthropic(api_key=api_key)
 
         # 设置默认参数
         self.default_max_tokens = kwargs.get("max_tokens", 4096)

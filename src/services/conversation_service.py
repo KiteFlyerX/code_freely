@@ -6,11 +6,11 @@ import asyncio
 from typing import List, Optional, AsyncIterator
 from datetime import datetime
 
-from ..ai import BaseAI, Message, MessageRole, AIResponse, AIRequestConfig, get_ai_provider
+from ..ai import BaseAI, Message, MessageRole, AIResponse, AIRequestConfig
 from ..database import get_db_session
 from ..database.repositories import ConversationRepository, MessageRepository
 from ..models import Conversation as ConversationModel, ConversationMessage as MessageModel
-from ..services.config_service import config_service
+from .config_service import config_service
 from ..vcs import get_vcs
 
 
@@ -28,19 +28,12 @@ class ConversationService:
     def _get_ai_client(self) -> BaseAI:
         """获取 AI 客户端"""
         if self._ai_client is None:
-            config = config_service.get_config()
+            from .ai_client_factory import get_ai_client
 
-            factory = get_ai_provider(config.ai.provider)
-            api_key = config_service.get_ai_api_key(config.ai.provider)
+            self._ai_client = get_ai_client()
 
-            if not api_key:
-                raise ValueError(f"未找到 {config.ai.provider} 的 API 密钥")
-
-            self._ai_client = factory.create(
-                api_key=api_key,
-                model=config.ai.model,
-                max_tokens=config.ai.max_tokens,
-            )
+            if not self._ai_client:
+                raise ValueError("未配置有效的 AI 提供商，请先配置提供商和 API 密钥")
 
         return self._ai_client
 
@@ -111,14 +104,26 @@ class ConversationService:
             for msg in history
         ]
 
-        # 获取配置
-        config = config_service.get_config()
-        ai_config = AIRequestConfig(
-            temperature=config.ai.temperature,
-            max_tokens=config.ai.max_tokens,
-            top_p=config.ai.top_p,
-            stream=stream,
-        )
+        # 获取活动提供商的配置
+        from .provider_service import provider_manager
+
+        provider_config = provider_manager.get_active_provider()
+
+        if provider_config:
+            ai_config = AIRequestConfig(
+                temperature=provider_config.temperature,
+                max_tokens=provider_config.max_tokens,
+                top_p=provider_config.top_p,
+                stream=stream,
+            )
+        else:
+            # 默认配置
+            ai_config = AIRequestConfig(
+                temperature=0.7,
+                max_tokens=4096,
+                top_p=1.0,
+                stream=stream,
+            )
 
         # 调用 AI
         ai_client = self._get_ai_client()
@@ -183,14 +188,26 @@ class ConversationService:
             for msg in history
         ]
 
-        # 获取配置
-        config = config_service.get_config()
-        ai_config = AIRequestConfig(
-            temperature=config.ai.temperature,
-            max_tokens=config.ai.max_tokens,
-            top_p=config.ai.top_p,
-            stream=True,
-        )
+        # 获取活动提供商的配置
+        from .provider_service import provider_manager
+
+        provider_config = provider_manager.get_active_provider()
+
+        if provider_config:
+            ai_config = AIRequestConfig(
+                temperature=provider_config.temperature,
+                max_tokens=provider_config.max_tokens,
+                top_p=provider_config.top_p,
+                stream=True,
+            )
+        else:
+            # 默认配置
+            ai_config = AIRequestConfig(
+                temperature=0.7,
+                max_tokens=4096,
+                top_p=1.0,
+                stream=True,
+            )
 
         # 调用 AI
         ai_client = self._get_ai_client()

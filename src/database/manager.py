@@ -52,14 +52,22 @@ class DatabaseManager:
 
         self._engine = create_engine(
             url,
-            connect_args={"check_same_thread": False},
+            connect_args={
+                "check_same_thread": False,
+                "timeout": 30,  # 30秒超时，避免锁定问题
+            },
             poolclass=StaticPool,  # 单连接模式，适合 SQLite
             echo=False,  # 设为 True 可查看 SQL 日志
         )
 
         # 创建会话工厂
         self._session_factory = scoped_session(
-            sessionmaker(bind=self._engine, autoflush=False, autocommit=False)
+            sessionmaker(
+                bind=self._engine,
+                autoflush=False,
+                autocommit=False,
+                expire_on_commit=False  # 避免对象过期问题
+            )
         )
 
     @property
@@ -105,10 +113,45 @@ class DatabaseManager:
             try:
                 user = session.query(User).first()
                 session.commit()
+            except Exception:
+                session.rollback()
+                raise
             finally:
                 session.close()
         """
         return self._session_factory()
+
+    def safe_query(self, query_func):
+        """
+        安全查询，自动处理数据库锁定错误
+
+        使用示例:
+            def get_user(session):
+                return session.query(User).first()
+
+            user = db_manager.safe_query(get_user)
+        """
+        import time
+        max_retries = 3
+        retry_delay = 0.1  # 100ms
+
+        for attempt in range(max_retries):
+            session = self._session_factory()
+            try:
+                result = query_func(session)
+                session.commit()
+                return result
+            except Exception as e:
+                session.rollback()
+                if "database is locked" in str(e).lower() or "locked" in str(e).lower():
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+                        continue
+                raise
+            finally:
+                session.close()
+
+        return None
 
     def close(self):
         """关闭数据库连接"""

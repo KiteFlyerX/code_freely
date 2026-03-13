@@ -12,7 +12,8 @@ from PySide6.QtGui import QTextDocument, QTextCursor, QKeySequence, QShortcut
 from qfluentwidgets import (
     TextEdit, PlainTextEdit, PushButton,
     ComboBox, BodyLabel, StrongBodyLabel, ScrollArea,
-    CardWidget, SimpleCardWidget, InfoBar, InfoBarPosition
+    CardWidget, SimpleCardWidget, InfoBar, InfoBarPosition,
+    PillPushButton, ToolButton, FluentIcon
 )
 
 from ...services import (
@@ -188,12 +189,19 @@ class ChatView(QWidget):
         self.project_combo.addItems(["当前目录", "选择项目..."])
         layout.addWidget(self.project_combo)
 
-        # 模型选择
+        # 分隔符
+        layout.addWidget(StrongBodyLabel(" | "))
+
+        # 模型信息显示
         layout.addWidget(BodyLabel("模型:"))
-        self.model_combo = ComboBox()
-        self.model_combo.setMinimumWidth(150)
-        self.model_combo.addItems(["claude-sonnet-4-6", "gpt-4o", "deepseek-chat"])
-        layout.addWidget(self.model_combo)
+        self.model_label = StrongBodyLabel("未配置")
+        self.model_label.setStyleSheet("color: #888;")
+        layout.addWidget(self.model_label)
+
+        # 代理信息显示
+        self.proxy_label = BodyLabel("")
+        self.proxy_label.setStyleSheet("color: #666; font-size: 12px;")
+        layout.addWidget(self.proxy_label)
 
         layout.addStretch()
 
@@ -274,6 +282,9 @@ class ChatView(QWidget):
 
             provider = provider_manager.get_active_provider()
             if not provider:
+                self.model_label.setText("未配置提供商")
+                self.model_label.setStyleSheet("color: orange;")
+                self.proxy_label.setText("")
                 self.status_label.setText("未配置提供商")
                 self.status_label.setStyleSheet("color: orange;")
                 InfoBar.warning(
@@ -288,6 +299,9 @@ class ChatView(QWidget):
                 return False
 
             if not provider.api_key or provider.api_key.startswith("test"):
+                self.model_label.setText(f"{provider.name}")
+                self.model_label.setStyleSheet("color: orange;")
+                self.proxy_label.setText("")
                 self.status_label.setText("API 密钥无效")
                 self.status_label.setStyleSheet("color: orange;")
                 InfoBar.warning(
@@ -301,12 +315,37 @@ class ChatView(QWidget):
                 )
                 return False
 
-            # 配置有效
-            self.status_label.setText(f"活动: {provider.name} ({provider.model})")
+            # 配置有效 - 更新显示信息
+            # 显示提供商名称和模型
+            self.model_label.setText(f"{provider.name} ({provider.model})")
+            self.model_label.setStyleSheet("color: #0078d4; font-weight: bold;")
+
+            # 显示代理信息
+            if provider.proxy_enabled and provider.proxy_url:
+                # 隐藏部分代理信息保护隐私
+                proxy_display = self._mask_proxy_url(provider.proxy_url)
+                self.proxy_label.setText(f"代理: {proxy_display}")
+            else:
+                self.proxy_label.setText("")
+
+            # 显示端点信息（可选）
+            endpoint_short = provider.api_endpoint.replace("https://", "").replace("http://", "")
+            if len(endpoint_short) > 30:
+                endpoint_short = endpoint_short[:27] + "..."
+
+            # 状态标签显示详细信息
+            status_text = f"提供商: {provider.name} | 模型: {provider.model} | 端点: {endpoint_short}"
+            if provider.proxy_enabled:
+                status_text += " | 已启用代理"
+            self.status_label.setText(status_text)
             self.status_label.setStyleSheet("color: green;")
+
             return True
 
         except Exception as e:
+            self.model_label.setText("配置检查失败")
+            self.model_label.setStyleSheet("color: red;")
+            self.proxy_label.setText("")
             self.status_label.setText("配置检查失败")
             self.status_label.setStyleSheet("color: red;")
             InfoBar.error(
@@ -319,6 +358,20 @@ class ChatView(QWidget):
                 parent=self
             )
             return False
+
+    def _mask_proxy_url(self, proxy_url: str) -> str:
+        """隐藏代理URL的部分信息保护隐私"""
+        try:
+            # 简单的掩码处理
+            if "@" in proxy_url:
+                # 有认证信息: http://user:pass@host:port
+                parts = proxy_url.split("@")
+                return f"***@{parts[1]}"
+            else:
+                # 无认证信息: http://host:port
+                return proxy_url
+        except:
+            return "***"
 
     def set_work_dir(self, work_dir):
         """设置工作目录"""

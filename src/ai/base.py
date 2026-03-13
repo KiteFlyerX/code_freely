@@ -114,6 +114,33 @@ class BaseAI(ABC):
         """
         pass
 
+    async def chat_stream_collect_tools(
+        self,
+        messages: List[Message],
+        config: Optional[AIRequestConfig] = None
+    ) -> tuple[AsyncIterator[str], List[ToolCall]]:
+        """
+        流式聊天请求，同时收集工具调用（可选实现）
+
+        默认实现使用非流模式，子类可以重写以支持真正的流式
+
+        Args:
+            messages: 消息列表
+            config: 请求配置
+
+        Returns:
+            tuple: (流式文本迭代器, 工具调用列表)
+        """
+        # 默认实现：使用非流模式
+        response = await self.chat(messages, config)
+
+        async def text_gen():
+            if response.content:
+                yield response.content
+
+        tool_calls = response.tool_calls if response.tool_calls else []
+        return text_gen(), tool_calls
+
     @abstractmethod
     def validate_api_key(self) -> bool:
         """
@@ -153,27 +180,29 @@ class BaseAI(ABC):
         iterations = 0
 
         while iterations < max_iterations:
-            # 调用 AI（获取完整响应，包含工具调用信息）
-            response = await self.chat(current_messages, config)
+            # 调用 AI（流式输出，同时收集工具调用）
+            text_stream, tool_calls = await self.chat_stream_collect_tools(current_messages, config)
 
-            # 输出内容
-            if response.content:
-                yield response.content
+            # 流式输出文本内容
+            full_content = ""
+            async for chunk in text_stream:
+                full_content += chunk
+                yield chunk
 
             # 如果没有工具调用，直接返回
-            if not response.tool_calls:
+            if not tool_calls:
                 return
 
             # 添加 AI 响应到消息列表
             assistant_message = Message(
                 role=MessageRole.ASSISTANT,
-                content=response.content or "",
-                tool_calls=response.tool_calls,
+                content=full_content,
+                tool_calls=tool_calls,
             )
             current_messages.append(assistant_message)
 
             # 显示工具调用信息
-            for tool_call in response.tool_calls:
+            for tool_call in tool_calls:
                 # 格式化参数显示
                 args_str = ""
                 if tool_call.arguments:
@@ -182,7 +211,7 @@ class BaseAI(ABC):
                 yield f"\n🔧 {tool_call.name} {args_str}"
 
             # 执行工具调用
-            for tool_call in response.tool_calls:
+            for tool_call in tool_calls:
                 if tool_executor:
                     result = tool_executor(tool_call.name, tool_call.arguments)
                     # result 可能是 dict 或 ToolResult 对象

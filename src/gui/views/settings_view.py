@@ -185,13 +185,18 @@ class SettingsView(QWidget):
         layout.addWidget(BodyLabel("版本: 0.1.0"))
         layout.addWidget(BodyLabel("AI 编程辅助与知识沉淀工具"))
 
-        # 保存按钮
+        # 按钮布局
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
         save_btn = PrimaryPushButton("保存设置")
         save_btn.clicked.connect(self._save_config)
         button_layout.addWidget(save_btn)
+
+        # 添加重启按钮
+        restart_btn = PushButton("重启应用")
+        restart_btn.clicked.connect(self._restart_application)
+        button_layout.addWidget(restart_btn)
 
         layout.addLayout(button_layout)
 
@@ -240,6 +245,49 @@ class SettingsView(QWidget):
             duration=2000,
             parent=self
         )
+
+    def _restart_application(self):
+        """重启应用程序"""
+        from PySide6.QtWidgets import QApplication
+        import sys
+
+        # 显示提示信息
+        InfoBar.info(
+            title="正在重启",
+            content="应用即将关闭并重新启动...",
+            orient=Qt.Horizontal,
+            isClosable=False,
+            position=InfoBarPosition.TOP,
+            duration=2000,
+            parent=self
+        )
+
+        # 延迟执行重启，让提示信息显示出来
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(1000, self._perform_restart)
+
+    def _perform_restart(self):
+        """执行重启操作"""
+        from PySide6.QtWidgets import QApplication
+        import sys
+        import os
+
+        # 获取当前应用程序实例
+        app = QApplication.instance()
+
+        # 关闭所有窗口
+        app.closeAllWindows()
+
+        # 准备重启参数
+        # 使用 QProcess 或直接退出并让启动脚本重启
+        # 这里我们使用简单的退出方式，用户可以手动重新启动
+        # 或者可以保存当前状态并退出
+
+        # 保存配置
+        self._save_config()
+
+        # 退出应用（返回码 133 表示需要重启）
+        app.exit(133)
 
     def _on_provider_changed(self, provider: str):
         """提供商变化处理"""

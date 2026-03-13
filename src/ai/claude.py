@@ -247,6 +247,92 @@ class ClaudeAI(BaseAI):
         except Exception as e:
             raise RuntimeError(f"流式请求失败: {e}") from e
 
+    async def chat_stream_with_tools(
+        self,
+        messages: List[Message],
+        config: Optional[AIRequestConfig] = None
+    ) -> tuple[AsyncIterator[str], List[ToolCall]]:
+        """
+        流式聊天请求，同时收集工具调用
+
+        Args:
+            messages: 消息列表
+            config: 请求配置
+
+        Returns:
+            tuple: (流式文本迭代器, 工具调用列表)
+        """
+        if config is None:
+            config = AIRequestConfig()
+
+        api_messages = self._convert_messages(messages)
+
+        # 构建请求参数
+        request_params = {
+            "model": self.model,
+            "messages": api_messages,
+            "max_tokens": config.max_tokens or self.default_max_tokens,
+            "temperature": config.temperature,
+            "top_p": config.top_p,
+            "stream": True,
+        }
+
+        if config.tools:
+            request_params["tools"] = config.tools
+
+        if config.extra_params:
+            request_params.update(config.extra_params)
+
+        tool_calls = []
+        current_tool = None
+
+        async def text_generator():
+            nonlocal current_tool
+            try:
+                stream = await self.async_client.messages.create(**request_params)
+
+                async for event in stream:
+                    if event.type == "content_block_start":
+                        if event.content_block.type == "tool_use":
+                            # 开始新的工具调用
+                            current_tool = ToolCall(
+                                id=event.content_block.id,
+                                name=event.content_block.name,
+                                arguments={}
+                            )
+                            tool_calls.append(current_tool)
+
+                    elif event.type == "content_block_delta":
+                        if event.delta.type == "text_delta":
+                            # 文本内容
+                            yield event.delta.text
+                        elif event.delta.type == "input_json_delta":
+                            # 工具参数增量
+                            if current_tool:
+                                import json
+                                partial = event.delta.partial_json
+                                try:
+                                    # 尝试解析累积的参数
+                                    if not hasattr(current_tool, '_partial_args'):
+                                        current_tool._partial_args = ""
+                                    current_tool._partial_args += partial
+                                    # 尝试解析为完整的 JSON
+                                    current_tool.arguments = json.loads(current_tool._partial_args)
+                                except json.JSONDecodeError:
+                                    # 还不完整，继续累积
+                                    pass
+
+                    elif event.type == "content_block_stop":
+                        # 内容块结束
+                        current_tool = None
+
+            except anthropic.APIError as e:
+                raise RuntimeError(f"Claude API 错误: {e}") from e
+            except Exception as e:
+                raise RuntimeError(f"流式请求失败: {e}") from e
+
+        return text_generator(), tool_calls
+
     def validate_api_key(self) -> bool:
         """
         验证 API 密钥是否有效

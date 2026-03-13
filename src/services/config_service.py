@@ -41,7 +41,7 @@ class AppConfig:
     default_project_path: str = ""
     auto_commit: bool = True
     create_temp_branch: bool = True
-    theme: str = "auto"  # light, dark, auto
+    theme: str = "dark"  # light, dark, auto
 
     def __post_init__(self):
         if self.ai is None:
@@ -66,7 +66,7 @@ class AppConfig:
             default_project_path=data.get("default_project_path", ""),
             auto_commit=data.get("auto_commit", True),
             create_temp_branch=data.get("create_temp_branch", True),
-            theme=data.get("theme", "auto"),
+            theme=data.get("theme", "dark"),
         )
 
 

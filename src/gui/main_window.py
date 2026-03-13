@@ -235,6 +235,39 @@ class MainWindow(FluentWindow):
             self.settings_view.objectName()
         )
 
+    def restart_app(self):
+        """重启应用程序"""
+        from PySide6.QtCore import QTimer
+        import sys
+
+        # 显示提示信息
+        InfoBar.info(
+            title="正在重启",
+            content="应用即将关闭并重新启动...",
+            orient=Qt.Horizontal,
+            isClosable=False,
+            position=InfoBarPosition.TOP,
+            duration=2000,
+            parent=self
+        )
+
+        # 延迟执行重启
+        QTimer.singleShot(1000, self._perform_restart)
+
+    def _perform_restart(self):
+        """执行重启操作"""
+        import sys
+        import os
+
+        app = QApplication.instance()
+
+        # 关闭所有窗口
+        app.closeAllWindows()
+
+        # 退出应用（返回码 133 表示需要重启）
+        # 可以在外部启动脚本中检测这个返回码并自动重启
+        app.exit(133)
+
 
 def run_gui():
     """运行 GUI 应用"""
@@ -251,4 +284,26 @@ def run_gui():
     window = MainWindow()
     window.show()
 
-    sys.exit(app.exec())
+    # 运行应用并获取退出码
+    exit_code = app.exec()
+
+    # 如果退出码是 133，表示需要重启
+    if exit_code == 133:
+        import subprocess
+        import os
+
+        # 重新启动应用
+        # 获取当前脚本路径
+        current_script = sys.argv[0]
+        if not current_script or current_script == "-c":
+            # 如果是交互式运行，尝试找到主入口
+            current_script = os.path.join(os.path.dirname(__file__), "..", "..", "start_gui.py")
+
+        # 使用相同的 Python 解释器重新启动
+        try:
+            subprocess.Popen([sys.executable, current_script] + sys.argv[1:])
+        except Exception as e:
+            print(f"重启失败: {e}")
+            sys.exit(1)
+
+    sys.exit(exit_code)

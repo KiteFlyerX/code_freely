@@ -172,7 +172,13 @@ class BaseAI(ABC):
             for tool_call in response.tool_calls:
                 if tool_executor:
                     result = tool_executor(tool_call.name, tool_call.arguments)
-                    tool_call.result = str(result.to_dict())
+                    # result 可能是 dict 或 ToolResult 对象
+                    if isinstance(result, dict):
+                        tool_call.result = str(result)
+                    elif hasattr(result, 'to_dict'):
+                        tool_call.result = str(result.to_dict())
+                    else:
+                        tool_call.result = str(result)
 
                     # 添加工具结果消息
                     tool_message = Message(

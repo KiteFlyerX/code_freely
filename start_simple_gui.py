@@ -339,7 +339,7 @@ class CodeTraceAIWindow(QMainWindow):
         self.chat_area.append("\n[系统] 正在思考...")
 
         # 使用 QThread 在后台发送消息
-        from PySide6.QtCore import QThread, QObject, Signal
+        from PySide6.QtCore import QThread, QObject, Signal, QTimer
 
         class ChatWorker(QObject):
             finished = Signal(str)
@@ -354,7 +354,6 @@ class CodeTraceAIWindow(QMainWindow):
             def run(self):
                 print(f"[DEBUG] ChatWorker.run 开始执行")
                 import asyncio
-                import sys
                 try:
                     print(f"[DEBUG] 创建事件循环")
                     loop = asyncio.new_event_loop()
@@ -365,13 +364,14 @@ class CodeTraceAIWindow(QMainWindow):
                         message = await conversation_service.send_message(
                             self.conversation_id, self.content
                         )
-                        print(f"[DEBUG] 收到响应: {message.content[:50] if message.content else 'empty'}...")
+                        result = message.content[:100] if message.content else 'empty'
+                        print(f"[DEBUG] 收到响应: {result}...")
                         return message.content
 
                     response = loop.run_until_complete(send_and_get_response())
                     loop.run_until_complete(loop.shutdown_asyncgens())
                     loop.close()
-                    print(f"[DEBUG] 发送 finished 信号")
+                    print(f"[DEBUG] 发送 finished 信号，响应长度: {len(response) if response else 0}")
                     self.finished.emit(response)
                 except Exception as e:
                     import traceback
@@ -408,7 +408,7 @@ class CodeTraceAIWindow(QMainWindow):
                 self.chat_area.setTextCursor(cursor)
 
         def on_finished(response):
-            print(f"[DEBUG] on_finished: {response[:50] if response else 'empty'}...")
+            print(f"[DEBUG] on_finished: 响应长度={len(response) if response else 0}")
             cleanup_thinking_text()
             self.chat_area.append(f"\n[AI]: {response}")
             self.chat_input.setEnabled(True)
@@ -417,7 +417,7 @@ class CodeTraceAIWindow(QMainWindow):
             if thread in self._active_threads:
                 self._active_threads.remove(thread)
             thread.quit()
-            thread.wait(3000)  # 等待最多3秒
+            thread.wait(3000)
             thread.deleteLater()
 
         def on_error(error_msg):
@@ -436,8 +436,13 @@ class CodeTraceAIWindow(QMainWindow):
             thread.wait(3000)
             thread.deleteLater()
 
+        # 使用 QTimer 延迟调用 run()，确保线程事件循环已启动
+        def start_worker():
+            print(f"[DEBUG] start_worker 被调用")
+            QTimer.singleShot(100, worker.run)
+
         print(f"[DEBUG] 连接信号")
-        thread.started.connect(worker.run)
+        thread.started.connect(start_worker)
         worker.finished.connect(on_finished)
         worker.error.connect(on_error)
         print(f"[DEBUG] 启动线程")

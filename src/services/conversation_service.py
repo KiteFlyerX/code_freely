@@ -83,6 +83,8 @@ class ConversationService:
                                 status_result = subprocess.run(
                                     ['git', 'status', '--short'],
                                     capture_output=True,
+                                    encoding='utf-8',
+                                    errors='replace',
                                     text=True,
                                     cwd=target_dir
                                 )
@@ -133,7 +135,8 @@ class ConversationService:
                                 add_result = subprocess.run(
                                     ['git', 'add', '-A'],
                                     capture_output=True,
-                                    text=True,
+                                    encoding='utf-8',
+                                    errors='replace',
                                     cwd=target_dir
                                 )
 
@@ -141,7 +144,8 @@ class ConversationService:
                                     commit_result = subprocess.run(
                                         ['git', 'commit', '-m', commit_msg],
                                         capture_output=True,
-                                        text=True,
+                                        encoding='utf-8',
+                                        errors='replace',
                                         cwd=target_dir
                                     )
 
@@ -150,6 +154,8 @@ class ConversationService:
                                         hash_result = subprocess.run(
                                             ['git', 'rev-parse', 'HEAD'],
                                             capture_output=True,
+                                            encoding='utf-8',
+                                            errors='replace',
                                             text=True,
                                             cwd=target_dir
                                         )

@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QInputDialog, QMessageBox, QLineEdit, QFileDialog, QSplitter, QStatusBar
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QPalette, QColor
 
 # 导入服务模块（这些不涉及 Qt）
 try:
@@ -46,6 +47,167 @@ except Exception as e:
     provider_manager = None
     config_service = None
     conversation_service = None
+
+
+# 全局样式设置
+def setup_app_style(app):
+    """设置应用样式"""
+    # 设置默认字体
+    font = QFont("Segoe UI", 10)
+    app.setFont(font)
+
+    # 设置样式表
+    app.setStyle("Fusion")
+
+    # 自定义样式
+    style_sheet = """
+    QMainWindow {
+        background-color: #f5f5f5;
+    }
+
+    QWidget {
+        background-color: #f5f5f5;
+        color: #333333;
+        font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+        font-size: 10pt;
+    }
+
+    QListWidget {
+        background-color: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        padding: 4px;
+    }
+
+    QListWidget::item {
+        padding: 8px;
+        border-radius: 3px;
+    }
+
+    QListWidget::item:selected {
+        background-color: #e3f2fd;
+        color: #1976d2;
+    }
+
+    QListWidget::item:hover {
+        background-color: #f5f5f5;
+    }
+
+    QPushButton {
+        background-color: #1976d2;
+        color: #ffffff;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 16px;
+        font-weight: 500;
+    }
+
+    QPushButton:hover {
+        background-color: #1565c0;
+    }
+
+    QPushButton:pressed {
+        background-color: #0d47a1;
+    }
+
+    QPushButton:disabled {
+        background-color: #bdbdbd;
+        color: #757575;
+    }
+
+    QTextEdit {
+        background-color: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        padding: 8px;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 10pt;
+        line-height: 1.5;
+        selection-background-color: #e3f2fd;
+    }
+
+    QLineEdit {
+        background-color: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        padding: 6px 10px;
+        font-size: 10pt;
+    }
+
+    QLineEdit:focus {
+        border: 1px solid #1976d2;
+    }
+
+    QTableWidget {
+        background-color: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        gridline-color: #f0f0f0;
+    }
+
+    QTableWidget::item {
+        padding: 6px;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    QTableWidget::item:selected {
+        background-color: #e3f2fd;
+        color: #1976d2;
+    }
+
+    QTableWidget::horizontalHeader {
+        background-color: #fafafa;
+        border-bottom: 2px solid #e0e0e0;
+        padding: 8px;
+        font-weight: 600;
+    }
+
+    QHeaderView::section {
+        background-color: #fafafa;
+        border: none;
+        border-bottom: 2px solid #e0e0e0;
+        border-right: 1px solid #e0e0e0;
+        padding: 8px;
+        font-weight: 600;
+    }
+
+    QLabel {
+        color: #424242;
+        font-size: 10pt;
+    }
+
+    QStatusBar {
+        background-color: #ffffff;
+        border-top: 1px solid #e0e0e0;
+        color: #757575;
+    }
+
+    /* 特殊标签样式 */
+    .user-message {
+        color: #1976d2;
+        font-weight: 500;
+    }
+
+    .ai-message {
+        color: #424242;
+    }
+
+    .system-message {
+        color: #757575;
+        font-style: italic;
+    }
+
+    .tool-message {
+        color: #388e3c;
+        font-weight: 500;
+    }
+
+    .error-message {
+        color: #d32f2f;
+        font-weight: 500;
+    }
+    """
+    app.setStyleSheet(style_sheet)
 
 # 简化的主窗口
 class CodeTraceAIWindow(QMainWindow):
@@ -236,6 +398,11 @@ class CodeTraceAIWindow(QMainWindow):
         self.chat_area = QTextEdit()
         self.chat_area.setReadOnly(True)
         self.chat_area.setPlaceholderText("对话记录将显示在这里...")
+        # 设置等宽字体用于代码显示
+        chat_font = QFont("Consolas", 10)
+        if not chat_font.exactMatch():
+            chat_font = QFont("Courier New", 10)
+        self.chat_area.setFont(chat_font)
         layout.addWidget(self.chat_area)
 
         # 输入区域
@@ -1228,6 +1395,10 @@ class CodeTraceAIWindow(QMainWindow):
 
 # 创建并显示窗口
 app = QApplication(sys.argv)
+
+# 设置应用样式和字体
+setup_app_style(app)
+
 window = CodeTraceAIWindow()
 window.show()
 

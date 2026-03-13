@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QTextEdit,
     QTabWidget, QTableWidget, QTableWidgetItem,
-    QHeaderView, QListWidget
+    QHeaderView, QListWidget, QStackedWidget
 )
 from PySide6.QtCore import Qt
 

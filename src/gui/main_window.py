@@ -235,7 +235,11 @@ def run_gui():
     """运行 GUI 应用"""
     import sys
 
-    app = QApplication(sys.argv)
+    # 确保没有已经存在的 QApplication 实例
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
     app.setApplicationName("CodeTraceAI")
     app.setOrganizationName("CodeTraceAI")
 

@@ -75,19 +75,97 @@ class ConversationService:
                         vcs = get_vcs(target_dir)
                         if vcs:
                             file_path = arguments.get('file_path', '')
-                            # 生成提交消息
-                            commit_msg = f"Auto commit: Update {file_path}"
-                            # 提交修改的文件
-                            commit_id = vcs.commit(commit_msg, files=[file_path])
-                            if commit_id:
-                                # 添加提交信息到结果中
-                                if 'data' not in result_dict:
-                                    result_dict['data'] = {}
-                                result_dict['data']['auto_committed'] = True
-                                result_dict['data']['commit_id'] = commit_id
+
+                            # 获取 git diff 来生成更准确的提交消息
+                            try:
+                                import subprocess
+                                # 获取修改的文件列表
+                                status_result = subprocess.run(
+                                    ['git', 'status', '--short'],
+                                    capture_output=True,
+                                    text=True,
+                                    cwd=target_dir
+                                )
+
+                                # 生成提交消息（参考 Claude Code 的方式）
+                                if status_result.returncode == 0:
+                                    # 分析变更类型
+                                    added_files = []
+                                    modified_files = []
+                                    deleted_files = []
+
+                                    for line in status_result.stdout.strip().split('\n'):
+                                        if line:
+                                            status, path = line.strip().split(maxsplit=1)
+                                            if status.startswith('A'):
+                                                added_files.append(path)
+                                            elif status.startswith('M'):
+                                                modified_files.append(path)
+                                            elif status.startswith('D'):
+                                                deleted_files.append(path)
+
+                                    # 生成友好的提交消息
+                                    if added_files and not modified_files and not deleted_files:
+                                        commit_msg = f"Add {', '.join(added_files[:3])}"
+                                        if len(added_files) > 3:
+                                            commit_msg += f" and {len(added_files) - 3} more files"
+                                    elif modified_files and not added_files and not deleted_files:
+                                        commit_msg = f"Update {', '.join(modified_files[:3])}"
+                                        if len(modified_files) > 3:
+                                            commit_msg += f" and {len(modified_files) - 3} more files"
+                                    else:
+                                        # 混合变更
+                                        parts = []
+                                        if added_files:
+                                            parts.append(f"add {len(added_files)} file(s)")
+                                        if modified_files:
+                                            parts.append(f"update {len(modified_files)} file(s)")
+                                        if deleted_files:
+                                            parts.append(f"delete {len(deleted_files)} file(s)")
+                                        commit_msg = f"{', '.join(parts)}"
+
+                                    # 添加前缀
+                                    commit_msg = f"✨ {commit_msg}"
+                                else:
+                                    commit_msg = f"Update {file_path}"
+
+                                # 执行 git add 和 commit
+                                add_result = subprocess.run(
+                                    ['git', 'add', '-A'],
+                                    capture_output=True,
+                                    text=True,
+                                    cwd=target_dir
+                                )
+
+                                if add_result.returncode == 0:
+                                    commit_result = subprocess.run(
+                                        ['git', 'commit', '-m', commit_msg],
+                                        capture_output=True,
+                                        text=True,
+                                        cwd=target_dir
+                                    )
+
+                                    if commit_result.returncode == 0:
+                                        # 获取 commit hash
+                                        hash_result = subprocess.run(
+                                            ['git', 'rev-parse', 'HEAD'],
+                                            capture_output=True,
+                                            text=True,
+                                            cwd=target_dir
+                                        )
+                                        commit_id = hash_result.stdout.strip() if hash_result.returncode == 0 else None
+
+                                        # 添加提交信息到结果中
+                                        if 'data' not in result_dict:
+                                            result_dict['data'] = {}
+                                        result_dict['data']['auto_committed'] = True
+                                        result_dict['data']['commit_id'] = commit_id
+                                        result_dict['data']['commit_msg'] = commit_msg
+                            except Exception as e:
+                                print(f"自动提交失败: {e}")
                 except Exception as e:
                     # 自动提交失败不影响工具执行结果
-                    print(f"自动提交失败: {e}")
+                    print(f"自动提交处理失败: {e}")
 
             return result_dict
         finally:

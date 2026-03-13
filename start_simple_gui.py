@@ -303,14 +303,12 @@ class CodeTraceAIWindow(QMainWindow):
 
     def _on_send_chat_message(self):
         """发送聊天消息"""
-        print(f"[DEBUG] _on_send_chat_message 被调用")
         content = self.chat_input.toPlainText().strip()
         if not content:
             return
 
         # 检查提供商
         provider = provider_manager.get_active_provider()
-        print(f"[DEBUG] provider: {provider}")
         if not provider:
             self.chat_area.append("\n[错误] 请先在'提供商管理'页面配置 AI 提供商")
             return
@@ -321,12 +319,9 @@ class CodeTraceAIWindow(QMainWindow):
 
         # 确保有对话 ID
         if not hasattr(self, 'chat_conversation_id') or self.chat_conversation_id is None:
-            print(f"[DEBUG] 创建新对话")
             self._on_new_chat()
             if not hasattr(self, 'chat_conversation_id') or self.chat_conversation_id is None:
                 return
-
-        print(f"[DEBUG] conversation_id: {self.chat_conversation_id}")
 
         # 显示用户消息
         self.chat_area.append(f"\n[用户]: {content}")
@@ -338,6 +333,9 @@ class CodeTraceAIWindow(QMainWindow):
         self.chat_input.setEnabled(False)
         self.chat_area.append("\n[系统] 正在思考...")
 
+        # 保存"正在思考"的位置，用于移除
+        thinking_marker = f"__THINKING_{len(content)}__"
+
         # 使用 QThread 在后台发送消息
         from PySide6.QtCore import QThread, QObject, Signal, QTimer
 
@@ -347,42 +345,41 @@ class CodeTraceAIWindow(QMainWindow):
 
             def __init__(self, conversation_id, content):
                 super().__init__()
-                print(f"[DEBUG] ChatWorker.__init__: conversation_id={conversation_id}")
                 self.conversation_id = conversation_id
                 self.content = content
 
             def run(self):
-                print(f"[DEBUG] ChatWorker.run 开始执行")
                 import asyncio
                 try:
-                    print(f"[DEBUG] 创建事件循环")
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
 
-                    async def send_and_get_response():
-                        print(f"[DEBUG] 开始发送消息: {self.content[:50]}...")
-                        message = await conversation_service.send_message(
-                            self.conversation_id, self.content
-                        )
-                        result = message.content[:100] if message.content else 'empty'
-                        print(f"[DEBUG] 收到响应: {result}...")
-                        return message.content
+                    async def send_with_retry():
+                        # 重试机制
+                        max_retries = 3
+                        for attempt in range(max_retries):
+                            try:
+                                message = await conversation_service.send_message(
+                                    self.conversation_id, self.content
+                                )
+                                return message.content
+                            except Exception as e:
+                                if attempt < max_retries - 1:
+                                    print(f"[重试] 第 {attempt + 1} 次失败，{2**attempt}秒后重试...")
+                                    await asyncio.sleep(2**attempt)
+                                else:
+                                    raise
 
-                    response = loop.run_until_complete(send_and_get_response())
+                    response = loop.run_until_complete(send_with_retry())
                     loop.run_until_complete(loop.shutdown_asyncgens())
                     loop.close()
-                    print(f"[DEBUG] 发送 finished 信号，响应长度: {len(response) if response else 0}")
                     self.finished.emit(response)
                 except Exception as e:
                     import traceback
-                    print(f"[DEBUG] 异常: {e}")
                     traceback.print_exc()
                     self.error.emit(str(e))
-                finally:
-                    print(f"[DEBUG] ChatWorker.run 结束")
 
         # 创建并启动线程
-        print(f"[DEBUG] 创建线程")
         thread = QThread()
         thread.setObjectName("ChatWorkerThread")
         worker = ChatWorker(self.chat_conversation_id, content)
@@ -391,29 +388,24 @@ class CodeTraceAIWindow(QMainWindow):
         # 保存线程引用
         self._active_threads.append(thread)
 
-        def cleanup_thinking_text():
-            """移除 "正在思考..." 提示"""
-            print(f"[DEBUG] cleanup_thinking_text")
-            # 获取当前文本
-            current_text = self.chat_area.toPlainText()
-            # 查找并移除 "[系统] 正在思考..."
-            if "[系统] 正在思考..." in current_text:
-                new_text = current_text.replace("[系统] 正在思考...\n", "")
-                new_text = new_text.replace("\n[系统] 正在思考...", "")
-                new_text = new_text.replace("[系统] 正在思考...", "")
-                self.chat_area.setPlainText(new_text)
-                # 移动光标到末尾
-                cursor = self.chat_area.textCursor()
-                cursor.movePosition(cursor.End)
-                self.chat_area.setTextCursor(cursor)
-
+        # 注意：所有回调都是在主线程中执行的（通过信号槽机制）
         def on_finished(response):
-            print(f"[DEBUG] on_finished: 响应长度={len(response) if response else 0}")
-            cleanup_thinking_text()
+            # 在主线程中安全地更新 GUI
+            import re
+            text = self.chat_area.toPlainText()
+            # 移除"正在思考"文本
+            text = re.sub(r'\n\[系统\] 正在思考\.\.\.', '', text)
+            self.chat_area.setPlainText(text)
+            # 移动光标到末尾
+            cursor = self.chat_area.textCursor()
+            cursor.movePosition(cursor.End)
+            self.chat_area.setTextCursor(cursor)
+
             self.chat_area.append(f"\n[AI]: {response}")
             self.chat_input.setEnabled(True)
             self.chat_input.setFocus()
-            # 从活跃线程列表中移除
+
+            # 清理线程
             if thread in self._active_threads:
                 self._active_threads.remove(thread)
             thread.quit()
@@ -421,33 +413,41 @@ class CodeTraceAIWindow(QMainWindow):
             thread.deleteLater()
 
         def on_error(error_msg):
-            print(f"[DEBUG] on_error: {error_msg}")
-            cleanup_thinking_text()
-            if "401" in error_msg or "authentication" in error_msg.lower():
+            # 在主线程中安全地更新 GUI
+            import re
+            text = self.chat_area.toPlainText()
+            # 移除"正在思考"文本
+            text = re.sub(r'\n\[系统\] 正在思考\.\.\.', '', text)
+            self.chat_area.setPlainText(text)
+            # 移动光标到末尾
+            cursor = self.chat_area.textCursor()
+            cursor.movePosition(cursor.End)
+            self.chat_area.setTextCursor(cursor)
+
+            if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+                self.chat_area.append(f"\n[错误] 请求超时，请检查网络连接或稍后重试")
+            elif "401" in error_msg or "authentication" in error_msg.lower():
                 self.chat_area.append(f"\n[错误] API 密钥无效，请在'提供商管理'页面更新")
             else:
-                self.chat_area.append(f"\n[错误] {error_msg}")
+                self.chat_area.append(f"\n[错误] {error_msg[:200]}")
             self.chat_input.setEnabled(True)
             self.chat_input.setFocus()
-            # 从活跃线程列表中移除
+
+            # 清理线程
             if thread in self._active_threads:
                 self._active_threads.remove(thread)
             thread.quit()
             thread.wait(3000)
             thread.deleteLater()
 
-        # 使用 QTimer 延迟调用 run()，确保线程事件循环已启动
+        # 使用 QTimer 延迟调用，确保线程事件循环已启动
         def start_worker():
-            print(f"[DEBUG] start_worker 被调用")
-            QTimer.singleShot(100, worker.run)
+            QTimer.singleShot(50, worker.run)
 
-        print(f"[DEBUG] 连接信号")
         thread.started.connect(start_worker)
         worker.finished.connect(on_finished)
         worker.error.connect(on_error)
-        print(f"[DEBUG] 启动线程")
         thread.start()
-        print(f"[DEBUG] 线程已启动")
 
     def create_history_page(self):
         """创建历史页面"""

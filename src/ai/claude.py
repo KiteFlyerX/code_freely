@@ -33,15 +33,36 @@ class ClaudeAI(BaseAI):
         # 保存 base_url
         self.base_url = base_url
 
+        # 设置超时时间（默认 5 分钟）
+        timeout = kwargs.get("timeout", 300)
+
         # 初始化同步和异步客户端
         if base_url:
             # 使用自定义端点（中转服务）
-            self.client = Anthropic(api_key=api_key, base_url=base_url)
-            self.async_client = AsyncAnthropic(api_key=api_key, base_url=base_url)
+            import httpx
+            timeout_client = httpx.Timeout(timeout=timeout, connect=60)
+            self.client = Anthropic(
+                api_key=api_key,
+                base_url=base_url,
+                timeout=timeout_client
+            )
+            self.async_client = AsyncAnthropic(
+                api_key=api_key,
+                base_url=base_url,
+                timeout=timeout_client
+            )
         else:
             # 使用官方端点
-            self.client = Anthropic(api_key=api_key)
-            self.async_client = AsyncAnthropic(api_key=api_key)
+            import httpx
+            timeout_client = httpx.Timeout(timeout=timeout, connect=60)
+            self.client = Anthropic(
+                api_key=api_key,
+                timeout=timeout_client
+            )
+            self.async_client = AsyncAnthropic(
+                api_key=api_key,
+                timeout=timeout_client
+            )
 
         # 设置默认参数
         self.default_max_tokens = kwargs.get("max_tokens", 4096)

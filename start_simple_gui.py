@@ -303,12 +303,14 @@ class CodeTraceAIWindow(QMainWindow):
 
     def _on_send_chat_message(self):
         """发送聊天消息"""
+        print(f"[DEBUG] _on_send_chat_message 被调用")
         content = self.chat_input.toPlainText().strip()
         if not content:
             return
 
         # 检查提供商
         provider = provider_manager.get_active_provider()
+        print(f"[DEBUG] provider: {provider}")
         if not provider:
             self.chat_area.append("\n[错误] 请先在'提供商管理'页面配置 AI 提供商")
             return
@@ -319,9 +321,12 @@ class CodeTraceAIWindow(QMainWindow):
 
         # 确保有对话 ID
         if not hasattr(self, 'chat_conversation_id') or self.chat_conversation_id is None:
+            print(f"[DEBUG] 创建新对话")
             self._on_new_chat()
             if not hasattr(self, 'chat_conversation_id') or self.chat_conversation_id is None:
                 return
+
+        print(f"[DEBUG] conversation_id: {self.chat_conversation_id}")
 
         # 显示用户消息
         self.chat_area.append(f"\n[用户]: {content}")
@@ -342,13 +347,16 @@ class CodeTraceAIWindow(QMainWindow):
 
             def __init__(self, conversation_id, content):
                 super().__init__()
+                print(f"[DEBUG] ChatWorker.__init__: conversation_id={conversation_id}")
                 self.conversation_id = conversation_id
                 self.content = content
 
             def run(self):
+                print(f"[DEBUG] ChatWorker.run 开始执行")
                 import asyncio
                 import sys
                 try:
+                    print(f"[DEBUG] 创建事件循环")
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
 
@@ -357,20 +365,24 @@ class CodeTraceAIWindow(QMainWindow):
                         message = await conversation_service.send_message(
                             self.conversation_id, self.content
                         )
-                        print(f"[DEBUG] 收到响应: {message.content[:50]}...")
+                        print(f"[DEBUG] 收到响应: {message.content[:50] if message.content else 'empty'}...")
                         return message.content
 
                     response = loop.run_until_complete(send_and_get_response())
                     loop.run_until_complete(loop.shutdown_asyncgens())
                     loop.close()
+                    print(f"[DEBUG] 发送 finished 信号")
                     self.finished.emit(response)
                 except Exception as e:
                     import traceback
-                    print(f"[DEBUG] 错误: {e}")
+                    print(f"[DEBUG] 异常: {e}")
                     traceback.print_exc()
                     self.error.emit(str(e))
+                finally:
+                    print(f"[DEBUG] ChatWorker.run 结束")
 
         # 创建并启动线程
+        print(f"[DEBUG] 创建线程")
         thread = QThread()
         thread.setObjectName("ChatWorkerThread")
         worker = ChatWorker(self.chat_conversation_id, content)
@@ -381,6 +393,7 @@ class CodeTraceAIWindow(QMainWindow):
 
         def cleanup_thinking_text():
             """移除 "正在思考..." 提示"""
+            print(f"[DEBUG] cleanup_thinking_text")
             # 获取当前文本
             current_text = self.chat_area.toPlainText()
             # 查找并移除 "[系统] 正在思考..."
@@ -423,10 +436,13 @@ class CodeTraceAIWindow(QMainWindow):
             thread.wait(3000)
             thread.deleteLater()
 
+        print(f"[DEBUG] 连接信号")
         thread.started.connect(worker.run)
         worker.finished.connect(on_finished)
         worker.error.connect(on_error)
+        print(f"[DEBUG] 启动线程")
         thread.start()
+        print(f"[DEBUG] 线程已启动")
 
     def create_history_page(self):
         """创建历史页面"""

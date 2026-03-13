@@ -48,6 +48,9 @@ class CodeTraceAIWindow(QMainWindow):
         # 当前工作目录
         self.current_work_dir = Path.cwd()
 
+        # 活跃的线程列表
+        self._active_threads = []
+
         # 创建中心部件
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -365,38 +368,54 @@ class CodeTraceAIWindow(QMainWindow):
 
         # 创建并启动线程
         thread = QThread()
+        thread.setObjectName("ChatWorkerThread")
         worker = ChatWorker(self.chat_conversation_id, content)
         worker.moveToThread(thread)
 
+        # 保存线程引用
+        self._active_threads.append(thread)
+
         def on_finished(response):
             # 移除 "正在思考..." 提示
-            cursor = self.chat_area.textCursor()
-            cursor.movePosition(cursor.End)
-            cursor.select(cursor.LineUnderCursor)
-            if cursor.selectedText() == "[系统] 正在思考...":
-                cursor.removeSelectedText()
-                cursor.deletePreviousChar()
+            text = self.chat_area.toPlainText()
+            if text.endswith("[系统] 正在思考..."):
+                cursor = self.chat_area.textCursor()
+                cursor.movePosition(cursor.End)
+                cursor.select(cursor.LineUnderCursor)
+                if cursor.selectedText() == "[系统] 正在思考...":
+                    cursor.removeSelectedText()
+                    cursor.deletePreviousChar()
             self.chat_area.append(f"\n[AI]: {response}")
             self.chat_input.setEnabled(True)
             self.chat_input.setFocus()
+            # 从活跃线程列表中移除
+            if thread in self._active_threads:
+                self._active_threads.remove(thread)
             thread.quit()
+            thread.wait()
             thread.deleteLater()
 
         def on_error(error_msg):
             # 移除 "正在思考..." 提示
-            cursor = self.chat_area.textCursor()
-            cursor.movePosition(cursor.End)
-            cursor.select(cursor.LineUnderCursor)
-            if cursor.selectedText() == "[系统] 正在思考...":
-                cursor.removeSelectedText()
-                cursor.deletePreviousChar()
+            text = self.chat_area.toPlainText()
+            if text.endswith("[系统] 正在思考..."):
+                cursor = self.chat_area.textCursor()
+                cursor.movePosition(cursor.End)
+                cursor.select(cursor.LineUnderCursor)
+                if cursor.selectedText() == "[系统] 正在思考...":
+                    cursor.removeSelectedText()
+                    cursor.deletePreviousChar()
             if "401" in error_msg or "authentication" in error_msg.lower():
                 self.chat_area.append(f"\n[错误] API 密钥无效，请在'提供商管理'页面更新")
             else:
                 self.chat_area.append(f"\n[错误] {error_msg}")
             self.chat_input.setEnabled(True)
             self.chat_input.setFocus()
+            # 从活跃线程列表中移除
+            if thread in self._active_threads:
+                self._active_threads.remove(thread)
             thread.quit()
+            thread.wait()
             thread.deleteLater()
 
         thread.started.connect(worker.run)
@@ -1182,6 +1201,15 @@ class CodeTraceAIWindow(QMainWindow):
         if 0 <= row < len(page_names):
             page_name = page_names[row]
             self.content_stack.setCurrentWidget(self.pages[page_name])
+
+    def closeEvent(self, event):
+        """窗口关闭事件"""
+        # 等待所有活跃线程完成
+        for thread in self._active_threads:
+            if thread.isRunning():
+                thread.quit()
+                thread.wait(1000)  # 最多等待 1 秒
+        event.accept()
 
 
 # 创建并显示窗口

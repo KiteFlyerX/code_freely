@@ -331,6 +331,9 @@ class ProviderManagementView(QWidget):
 
         # 提供商列表
         self.provider_list = QListWidget()
+        # 添加双击事件 - 双击直接编辑
+        self.provider_list.itemDoubleClicked.connect(self._on_provider_double_clicked)
+        # 保持单击事件 - 单击查看详情
         self.provider_list.itemClicked.connect(self._on_provider_selected)
         layout.addWidget(self.provider_list)
 
@@ -392,7 +395,7 @@ class ProviderManagementView(QWidget):
             self.provider_list.addItem(item)
 
     def _on_provider_selected(self, item):
-        """提供商选择处理"""
+        """提供商选择处理（单击）"""
         provider_id = item.data(Qt.UserRole)
         if not provider_id:
             return
@@ -422,6 +425,56 @@ class ProviderManagementView(QWidget):
             self.switch_btn.setEnabled(not provider.is_active)
             self.edit_btn.setEnabled(True)
             self.delete_btn.setEnabled(not provider.is_active)
+
+    def _on_provider_double_clicked(self, item):
+        """提供商双击处理（双击直接编辑）"""
+        provider_id = item.data(Qt.UserRole)
+        if not provider_id:
+            return
+
+        providers = provider_manager.get_providers()
+        provider = next((p for p in providers if p.id == provider_id), None)
+
+        if provider:
+            # 创建预设对象以重用对话框
+            from ...services.provider_service import ProviderPreset
+            preset = ProviderPreset(
+                id=provider.id,
+                name=provider.name,
+                description="",
+                category=provider.provider_type.value,
+                config=provider
+            )
+
+            dialog = ProviderConfigDialog(preset, self)
+            # 使用 set_config 方法填充所有字段
+            dialog.set_config(provider)
+
+            if dialog.exec() == QDialog.Accepted:
+                config = dialog.get_config()
+                if provider_manager.update_provider(provider_id, config):
+                    InfoBar.success(
+                        title="成功",
+                        content=f"已更新提供商: {config.name}",
+                        orient=Qt.Horizontal,
+                        isClosable=True,
+                        position=InfoBarPosition.TOP,
+                        duration=3000,
+                        parent=self
+                    )
+                    self._load_providers()
+                    # 更新详情显示
+                    self._on_provider_selected(self.provider_list.currentItem())
+                else:
+                    InfoBar.error(
+                        title="失败",
+                        content="更新提供商失败",
+                        orient=Qt.Horizontal,
+                        isClosable=True,
+                        position=InfoBarPosition.TOP,
+                        duration=3000,
+                        parent=self
+                    )
 
     def _on_import_preset(self):
         """导入预设"""

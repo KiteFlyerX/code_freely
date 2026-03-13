@@ -331,7 +331,7 @@ class CodeTraceAIWindow(QMainWindow):
 
         # 禁用输入
         self.chat_input.setEnabled(False)
-        self.chat_area.append("[系统] 正在思考...")
+        self.chat_area.append("\n[系统] 正在思考...")
 
         # 使用 QThread 在后台发送消息
         from PySide6.QtCore import QThread, QObject, Signal
@@ -347,14 +347,17 @@ class CodeTraceAIWindow(QMainWindow):
 
             def run(self):
                 import asyncio
+                import sys
                 try:
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
 
                     async def send_and_get_response():
+                        print(f"[DEBUG] 开始发送消息: {self.content[:50]}...")
                         message = await conversation_service.send_message(
                             self.conversation_id, self.content
                         )
+                        print(f"[DEBUG] 收到响应: {message.content[:50]}...")
                         return message.content
 
                     response = loop.run_until_complete(send_and_get_response())
@@ -363,6 +366,7 @@ class CodeTraceAIWindow(QMainWindow):
                     self.finished.emit(response)
                 except Exception as e:
                     import traceback
+                    print(f"[DEBUG] 错误: {e}")
                     traceback.print_exc()
                     self.error.emit(str(e))
 
@@ -375,16 +379,24 @@ class CodeTraceAIWindow(QMainWindow):
         # 保存线程引用
         self._active_threads.append(thread)
 
-        def on_finished(response):
-            # 移除 "正在思考..." 提示
-            text = self.chat_area.toPlainText()
-            if text.endswith("[系统] 正在思考..."):
+        def cleanup_thinking_text():
+            """移除 "正在思考..." 提示"""
+            # 获取当前文本
+            current_text = self.chat_area.toPlainText()
+            # 查找并移除 "[系统] 正在思考..."
+            if "[系统] 正在思考..." in current_text:
+                new_text = current_text.replace("[系统] 正在思考...\n", "")
+                new_text = new_text.replace("\n[系统] 正在思考...", "")
+                new_text = new_text.replace("[系统] 正在思考...", "")
+                self.chat_area.setPlainText(new_text)
+                # 移动光标到末尾
                 cursor = self.chat_area.textCursor()
                 cursor.movePosition(cursor.End)
-                cursor.select(cursor.LineUnderCursor)
-                if cursor.selectedText() == "[系统] 正在思考...":
-                    cursor.removeSelectedText()
-                    cursor.deletePreviousChar()
+                self.chat_area.setTextCursor(cursor)
+
+        def on_finished(response):
+            print(f"[DEBUG] on_finished: {response[:50] if response else 'empty'}...")
+            cleanup_thinking_text()
             self.chat_area.append(f"\n[AI]: {response}")
             self.chat_input.setEnabled(True)
             self.chat_input.setFocus()
@@ -392,19 +404,12 @@ class CodeTraceAIWindow(QMainWindow):
             if thread in self._active_threads:
                 self._active_threads.remove(thread)
             thread.quit()
-            thread.wait()
+            thread.wait(3000)  # 等待最多3秒
             thread.deleteLater()
 
         def on_error(error_msg):
-            # 移除 "正在思考..." 提示
-            text = self.chat_area.toPlainText()
-            if text.endswith("[系统] 正在思考..."):
-                cursor = self.chat_area.textCursor()
-                cursor.movePosition(cursor.End)
-                cursor.select(cursor.LineUnderCursor)
-                if cursor.selectedText() == "[系统] 正在思考...":
-                    cursor.removeSelectedText()
-                    cursor.deletePreviousChar()
+            print(f"[DEBUG] on_error: {error_msg}")
+            cleanup_thinking_text()
             if "401" in error_msg or "authentication" in error_msg.lower():
                 self.chat_area.append(f"\n[错误] API 密钥无效，请在'提供商管理'页面更新")
             else:
@@ -415,7 +420,7 @@ class CodeTraceAIWindow(QMainWindow):
             if thread in self._active_threads:
                 self._active_threads.remove(thread)
             thread.quit()
-            thread.wait()
+            thread.wait(3000)
             thread.deleteLater()
 
         thread.started.connect(worker.run)

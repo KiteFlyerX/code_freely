@@ -1704,6 +1704,36 @@ class CodeTraceAIWindow(QMainWindow):
         shortcut_hint.setStyleSheet("color: #888; font-size: 9pt;")
         config_layout.addWidget(shortcut_hint)
 
+        # 自动提交开关
+        auto_commit_layout = QHBoxLayout()
+        auto_commit_layout.addWidget(QLabel("代码提交:"))
+
+        self.auto_commit_checkbox = QCheckBox("自动提交代码（修改后自动提交到版本控制）")
+        try:
+            cfg = config_service.get_config()
+            self.auto_commit_checkbox.setChecked(cfg.auto_commit)
+        except:
+            self.auto_commit_checkbox.setChecked(True)
+        self.auto_commit_checkbox.stateChanged.connect(self._toggle_auto_commit)
+        auto_commit_layout.addWidget(self.auto_commit_checkbox)
+        auto_commit_layout.addStretch()
+        config_layout.addLayout(auto_commit_layout)
+
+        # 临时分支开关
+        temp_branch_layout = QHBoxLayout()
+        temp_branch_layout.addWidget(QLabel("版本控制:"))
+
+        self.temp_branch_checkbox = QCheckBox("提交时创建临时分支")
+        try:
+            cfg = config_service.get_config()
+            self.temp_branch_checkbox.setChecked(cfg.create_temp_branch)
+        except:
+            self.temp_branch_checkbox.setChecked(True)
+        self.temp_branch_checkbox.stateChanged.connect(self._toggle_temp_branch)
+        temp_branch_layout.addWidget(self.temp_branch_checkbox)
+        temp_branch_layout.addStretch()
+        config_layout.addLayout(temp_branch_layout)
+
         config_layout.addWidget(QLabel("---"))
         config_layout.addWidget(QLabel("AI 配置"))
         try:
@@ -1729,6 +1759,18 @@ class CodeTraceAIWindow(QMainWindow):
             self._dark_mode = is_checked
             # 重新应用样式
             setup_app_style(QApplication.instance(), self._dark_mode)
+
+    def _toggle_auto_commit(self, state):
+        """切换自动提交选项"""
+        from PySide6.QtCore import Qt
+        is_checked = (state == Qt.Checked.value)
+        config_service.update_app_config(auto_commit=is_checked)
+
+    def _toggle_temp_branch(self, state):
+        """切换临时分支选项"""
+        from PySide6.QtCore import Qt
+        is_checked = (state == Qt.Checked.value)
+        config_service.update_app_config(create_temp_branch=is_checked)
 
     def keyPressEvent(self, event):
         """处理键盘事件"""

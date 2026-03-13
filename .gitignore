@@ -70,3 +70,5 @@ Thumbs.db
 .codetrace/
 *.db
 *.log
+DISPLAY_BOX*
+display_box.*

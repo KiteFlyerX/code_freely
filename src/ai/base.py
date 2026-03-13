@@ -249,6 +249,9 @@ class BaseAI(ABC):
                                     yield f"✓ 输出:\n{preview}"
                             elif 'message' in data:
                                 yield f"✓ {data['message']}"
+                            elif 'auto_committed' in data and data.get('auto_committed'):
+                                # Write 工具自动提交成功
+                                yield f"✓ 已写入并自动提交"
                             else:
                                 yield f"✓ 执行成功"
                         else:

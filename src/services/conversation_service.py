@@ -63,7 +63,33 @@ class ConversationService:
         try:
             os.chdir(target_dir)
             result = tool_registry.execute(tool_name, **arguments)
-            return result.to_dict()
+            result_dict = result.to_dict()
+
+            # 自动提交：如果是 Write 工具且执行成功
+            if tool_name == "Write" and result_dict.get('success'):
+                try:
+                    from .config_service import config_service
+                    config = config_service.get_config()
+
+                    if config.auto_commit:
+                        vcs = get_vcs(target_dir)
+                        if vcs:
+                            file_path = arguments.get('file_path', '')
+                            # 生成提交消息
+                            commit_msg = f"Auto commit: Update {file_path}"
+                            # 提交修改的文件
+                            commit_id = vcs.commit(commit_msg, files=[file_path])
+                            if commit_id:
+                                # 添加提交信息到结果中
+                                if 'data' not in result_dict:
+                                    result_dict['data'] = {}
+                                result_dict['data']['auto_committed'] = True
+                                result_dict['data']['commit_id'] = commit_id
+                except Exception as e:
+                    # 自动提交失败不影响工具执行结果
+                    print(f"自动提交失败: {e}")
+
+            return result_dict
         finally:
             # 恢复原工作目录
             os.chdir(old_cwd)

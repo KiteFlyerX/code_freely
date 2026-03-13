@@ -191,6 +191,131 @@ class ConversationService:
 
         return ai_message
 
+    async def send_message_with_tools_stream(
+        self,
+        conversation_id: int,
+        content: str,
+        work_dir: Optional[Path] = None,
+    ) -> AsyncIterator[str]:
+        """
+        发送消息并流式获取 AI 响应（支持工具调用）
+
+        Args:
+            conversation_id: 对话 ID
+            content: 用户消息内容
+            work_dir: 工作目录（用于文件操作）
+
+        Yields:
+            str: AI 响应片段
+        """
+        # 设置工作目录
+        if work_dir:
+            self.set_work_dir(work_dir)
+        elif not self._current_work_dir:
+            # 如果没有设置工作目录，使用当前目录
+            self.set_work_dir(Path.cwd())
+
+        # 保存用户消息
+        self._message_repo.create(
+            conversation_id=conversation_id,
+            role=MessageRole.USER.value,
+            content=content,
+        )
+
+        # 获取对话历史（不包括刚刚保存的用户消息）
+        history = self._message_repo.get_by_conversation(conversation_id)
+        # 移除最后一个（刚保存的用户消息）
+        history = history[:-1]
+
+        # 构建消息列表
+        messages = []
+        # 添加历史消息
+        for msg in history:
+            messages.append(Message(
+                role=MessageRole(msg.role),
+                content=msg.content,
+                timestamp=msg.timestamp,
+            ))
+        # 添加当前用户消息
+        messages.append(Message(
+            role=MessageRole.USER,
+            content=content,
+        ))
+
+        # 获取工具配置
+        tools = tool_registry.get_schemas()
+
+        # 获取活动提供商的配置
+        from .provider_service import provider_manager
+
+        provider_config = provider_manager.get_active_provider()
+
+        if provider_config:
+            ai_config = AIRequestConfig(
+                temperature=provider_config.temperature,
+                max_tokens=provider_config.max_tokens,
+                top_p=provider_config.top_p,
+                stream=False,  # 注意：这里会使用内部流式
+                tools=tools,
+            )
+        else:
+            # 默认配置
+            ai_config = AIRequestConfig(
+                temperature=0.7,
+                max_tokens=4096,
+                top_p=1.0,
+                stream=False,
+                tools=tools,
+            )
+
+        # 添加系统消息，告诉 AI 它可以使用的工具
+        system_message = Message(
+            role=MessageRole.SYSTEM,
+            content="""你是一个 AI 编程助手，可以帮助用户编写、查看和修改代码。
+
+你可以使用以下工具：
+- Read: 读取文件内容
+- Write: 写入文件内容
+- Bash: 执行系统命令
+- Glob: 搜索文件
+
+当用户请求查看文件、写入代码或执行命令时，请使用相应的工具。
+
+工作目录: {work_dir}
+
+在执行文件操作时，请：
+1. 先使用 Read 工具查看现有文件内容（如果文件存在）
+2. 使用 Write 工具写入修改后的内容
+3. 告知用户所做的更改
+
+对于代码修改，请先解释你的更改意图，然后再执行。""".format(
+                work_dir=str(work_dir) if work_dir else "当前目录"
+            ),
+        )
+        messages.insert(0, system_message)
+
+        # 调用 AI（带工具调用的流式响应）
+        ai_client = self._get_ai_client()
+        full_response = ""
+
+        async for chunk in ai_client.chat_with_tools_stream(
+            messages=messages,
+            tools=tools,
+            tool_executor=self._execute_tool,
+            config=ai_config,
+            max_iterations=10,
+        ):
+            full_response += chunk
+            yield chunk
+
+        # 保存 AI 响应
+        self._message_repo.create(
+            conversation_id=conversation_id,
+            role=MessageRole.ASSISTANT.value,
+            content=full_response,
+            model=ai_client.model,
+        )
+
     async def send_message_with_tools(
         self,
         conversation_id: int,

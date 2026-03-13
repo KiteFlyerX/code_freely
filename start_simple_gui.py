@@ -316,7 +316,7 @@ class CodeTraceAIWindow(QMainWindow):
             self.chat_area.append(f"\n[错误] 创建对话失败: {e}")
 
     def _on_send_chat_message(self):
-        """发送聊天消息（带工具调用，类似 Claude Code）"""
+        """发送聊天消息（带工具调用，实时流式输出）"""
         content = self.chat_input.toPlainText().strip()
         if not content:
             return
@@ -345,11 +345,13 @@ class CodeTraceAIWindow(QMainWindow):
 
         # 禁用输入
         self.chat_input.setEnabled(False)
-        thinking_text = "\n[系统] 正在思考..."
-        self.chat_area.append(thinking_text)
 
-        # 保存"正在思考"的文本长度，用于移除
-        thinking_len = len(thinking_text)
+        # 添加 AI 响应开始标记
+        self.chat_area.append("\n[AI]: ")
+        # 保存当前位置，用于追加内容
+        cursor = self.chat_area.textCursor()
+        cursor.movePosition(cursor.End)
+        self.chat_area.setTextCursor(cursor)
 
         # 使用 Python 标准库的 threading
         import threading
@@ -358,25 +360,27 @@ class CodeTraceAIWindow(QMainWindow):
         result_queue = queue.Queue()
 
         def send_in_thread():
-            """在线程中发送消息（使用工具调用）"""
+            """在线程中发送消息（流式工具调用）"""
             import asyncio
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
-                async def send_with_tools():
-                    # 使用带工具调用的方法
+                async def send_with_tools_stream():
+                    # 使用带工具调用的流式方法
                     full_response = ""
-                    async for chunk in conversation_service.send_message_with_tools(
+                    async for chunk in conversation_service.send_message_with_tools_stream(
                         self.chat_conversation_id, content, self.current_work_dir
                     ):
                         full_response += chunk
-                    return full_response
+                        # 实时发送每个 chunk
+                        result_queue.put(("chunk", chunk))
+                    # 发送完成信号
+                    result_queue.put(("done", full_response))
 
-                response = loop.run_until_complete(send_with_tools())
+                loop.run_until_complete(send_with_tools_stream())
                 loop.run_until_complete(loop.shutdown_asyncgens())
                 loop.close()
-                result_queue.put(("success", response))
             except Exception as e:
                 import traceback
                 traceback.print_exc()
@@ -395,30 +399,38 @@ class CodeTraceAIWindow(QMainWindow):
                 result = result_queue.get_nowait()
                 status, data = result
 
-                # 移除"正在思考"文本
-                current_text = self.chat_area.toPlainText()
-                if current_text.endswith(thinking_text):
-                    new_text = current_text[:-thinking_len]
-                    self.chat_area.setPlainText(new_text)
-
-                if status == "success":
-                    self.chat_area.append(f"\n[AI]: {data}")
-                else:
+                if status == "chunk":
+                    # 实时追加内容
+                    cursor = self.chat_area.textCursor()
+                    cursor.movePosition(cursor.End)
+                    self.chat_area.setTextCursor(cursor)
+                    # 插入文本（保持滚动在底部）
+                    self.chat_area.insertPlainText(data)
+                    scrollbar = self.chat_area.verticalScrollBar()
+                    scrollbar.setValue(scrollbar.maximum())
+                    # 继续检查
+                    QTimer.singleShot(10, check_result)
+                elif status == "done":
+                    # 完成
+                    self.chat_input.setEnabled(True)
+                    self.chat_input.setFocus()
+                elif status == "error":
+                    # 错误
                     if "timeout" in str(data).lower() or "timed out" in str(data).lower():
-                        self.chat_area.append(f"\n[错误] 请求超时，请检查网络连接或稍后重试")
+                        self.chat_area.insertPlainText(f"\n[错误] 请求超时，请检查网络连接或稍后重试")
                     elif "401" in str(data) or "authentication" in str(data).lower():
-                        self.chat_area.append(f"\n[错误] API 密钥无效，请在'提供商管理'页面更新")
+                        self.chat_area.insertPlainText(f"\n[错误] API 密钥无效，请在'提供商管理'页面更新")
                     else:
-                        self.chat_area.append(f"\n[错误] {str(data)[:300]}")
+                        self.chat_area.insertPlainText(f"\n[错误] {str(data)[:300]}")
+                    self.chat_input.setEnabled(True)
+                    self.chat_input.setFocus()
 
-                self.chat_input.setEnabled(True)
-                self.chat_input.setFocus()
             except queue.Empty:
                 # 还没有结果，继续检查
-                QTimer.singleShot(100, check_result)
+                QTimer.singleShot(10, check_result)
 
-        # 100ms 后开始检查
-        QTimer.singleShot(100, check_result)
+        # 立即开始检查
+        QTimer.singleShot(10, check_result)
 
     def create_history_page(self):
         """创建历史页面"""

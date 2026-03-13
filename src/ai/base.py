@@ -124,6 +124,104 @@ class BaseAI(ABC):
         """
         pass
 
+    async def chat_with_tools_stream(
+        self,
+        messages: List[Message],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_executor: Optional[Callable] = None,
+        config: Optional[AIRequestConfig] = None,
+        max_iterations: int = 10,
+    ) -> AsyncIterator[str]:
+        """
+        带工具调用的流式聊天
+
+        Args:
+            messages: 消息列表
+            tools: 可用工具列表
+            tool_executor: 工具执行函数 (tool_name, arguments) -> ToolResult
+            config: 请求配置
+            max_iterations: 最大工具调用迭代次数
+
+        Yields:
+            str: 流式响应片段
+        """
+        if config is None:
+            config = AIRequestConfig()
+        config.tools = tools
+
+        current_messages = messages.copy()
+        iterations = 0
+
+        while iterations < max_iterations:
+            # 调用 AI（流式）
+            full_content = ""
+            async for chunk in self.chat_stream(current_messages, config):
+                full_content += chunk
+                yield chunk  # 实时输出
+
+            # 完整的 AI 响应（包含工具调用信息）
+            response = await self.chat(current_messages, config)
+
+            # 如果没有工具调用，直接返回
+            if not response.tool_calls:
+                return
+
+            # 添加 AI 响应到消息列表
+            assistant_message = Message(
+                role=MessageRole.ASSISTANT,
+                content=response.content or "",
+                tool_calls=response.tool_calls,
+            )
+            current_messages.append(assistant_message)
+
+            # 显示工具调用信息
+            for tool_call in response.tool_calls:
+                yield f"\n[工具调用: {tool_call.name}]"
+
+            # 执行工具调用
+            for tool_call in response.tool_calls:
+                if tool_executor:
+                    result = tool_executor(tool_call.name, tool_call.arguments)
+                    # result 可能是 dict 或 ToolResult 对象
+                    if isinstance(result, dict):
+                        result_str = str(result)
+                    elif hasattr(result, 'to_dict'):
+                        result_str = str(result.to_dict())
+                    else:
+                        result_str = str(result)
+                    tool_call.result = result_str
+
+                    # 显示工具结果（简化显示）
+                    if isinstance(result, dict) and result.get('success'):
+                        data = result.get('data', {})
+                        if isinstance(data, dict):
+                            if 'content' in data:
+                                yield f"[文件内容: {len(data['content'])} 字符]"
+                            elif 'output' in data:
+                                output = data['output']
+                                if len(output) > 200:
+                                    yield f"[命令输出: {output[:200]}...]"
+                                else:
+                                    yield f"[命令输出: {output}]"
+                            else:
+                                yield f"[执行成功]"
+                        else:
+                            yield f"[执行成功: {result_str}]"
+                    elif isinstance(result, dict):
+                        yield f"[执行失败: {result.get('error', '未知错误')}]"
+                    else:
+                        yield f"[执行结果: {result_str[:100]}]"
+
+                    # 添加工具结果消息
+                    tool_message = Message(
+                        role=MessageRole.TOOL,
+                        content=tool_call.result,
+                        tool_call_id=tool_call.id,
+                    )
+                    current_messages.append(tool_message)
+
+            iterations += 1
+
     async def chat_with_tools(
         self,
         messages: List[Message],

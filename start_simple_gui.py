@@ -21,7 +21,15 @@ from PySide6.QtWidgets import (
     QInputDialog, QMessageBox, QLineEdit, QFileDialog, QSplitter, QStatusBar
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QPalette, QColor
+from PySide6.QtGui import QFont, QPalette, QColor, QTextDocument
+
+# 尝试导入 markdown 库
+try:
+    import markdown
+    HAS_MARKDOWN = True
+except ImportError:
+    HAS_MARKDOWN = False
+    print("Warning: markdown not installed. Run: pip install markdown")
 
 # 导入服务模块（这些不涉及 Qt）
 try:
@@ -47,6 +55,141 @@ except Exception as e:
     provider_manager = None
     config_service = None
     conversation_service = None
+
+
+def render_markdown(text):
+    """将 Markdown 文本转换为 HTML"""
+    if not HAS_MARKDOWN:
+        return text
+
+    try:
+        import markdown
+        # 配置 Markdown 扩展
+        md = markdown.Markdown(extensions=[
+            'fenced_code',      # 代码块 ```lang```
+            'codehilite',       # 语法高亮
+            'tables',           # 表格
+            'nl2br',            # 换行转 <br>
+            'sane_lists',       # 更好的列表
+            'toc',              # 目录
+        ])
+
+        # 转换为 HTML
+        html = md.convert(text)
+
+        # 添加 CSS 样式
+        styled_html = f"""
+        <style>
+            body {{
+                font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+                font-size: 10pt;
+                line-height: 1.6;
+                color: #333;
+            }}
+            h1, h2, h3, h4, h5, h6 {{
+                color: #1976d2;
+                margin-top: 16px;
+                margin-bottom: 8px;
+                font-weight: 600;
+            }}
+            h1 {{ font-size: 1.5em; border-bottom: 2px solid #e0e0e0; padding-bottom: 8px; }}
+            h2 {{ font-size: 1.3em; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; }}
+            h3 {{ font-size: 1.15em; }}
+            code {{
+                font-family: 'Consolas', 'Courier New', monospace;
+                background-color: #f5f5f5;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-size: 0.9em;
+            }}
+            pre {{
+                background-color: #263238;
+                color: #eceff1;
+                padding: 12px;
+                border-radius: 4px;
+                overflow-x: auto;
+                margin: 8px 0;
+            }}
+            pre code {{
+                background-color: transparent;
+                padding: 0;
+                color: inherit;
+            }}
+            blockquote {{
+                border-left: 4px solid #1976d2;
+                margin: 8px 0;
+                padding-left: 12px;
+                color: #666;
+                font-style: italic;
+            }}
+            table {{
+                border-collapse: collapse;
+                width: 100%;
+                margin: 8px 0;
+            }}
+            th, td {{
+                border: 1px solid #e0e0e0;
+                padding: 8px 12px;
+                text-align: left;
+            }}
+            th {{
+                background-color: #f5f5f5;
+                font-weight: 600;
+            }}
+            ul, ol {{
+                margin: 8px 0;
+                padding-left: 24px;
+            }}
+            li {{
+                margin: 4px 0;
+            }}
+            a {{
+                color: #1976d2;
+                text-decoration: none;
+            }}
+            a:hover {{
+                text-decoration: underline;
+            }}
+            .tool-call {{
+                color: #388e3c;
+                font-weight: 500;
+                margin: 8px 0;
+            }}
+            .system-msg {{
+                color: #757575;
+                font-style: italic;
+                margin: 4px 0;
+            }}
+        </style>
+        {html}
+        """
+        return styled_html
+    except Exception as e:
+        print(f"Markdown render error: {e}")
+        return text
+
+
+def format_chat_message(content):
+    """格式化聊天消息，支持简单的 Markdown 语法"""
+    if not HAS_MARKDOWN:
+        return content
+
+    # 处理系统消息标记
+    lines = []
+    for line in content.split('\n'):
+        if line.startswith('> 使用工具:'):
+            lines.append(f'<p class="tool-call">{line}</p>')
+        elif line.startswith('[系统]'):
+            lines.append(f'<p class="system-msg">{line}</p>')
+        elif line.startswith('[AI]'):
+            lines.append(f'<p class="system-msg">{line}</p>')
+        elif line.startswith('[错误]'):
+            lines.append(f'<p class="error-msg" style="color:#d32f2f;">{line}</p>')
+        else:
+            lines.append(line)
+
+    formatted = '\n'.join(lines)
+    return render_markdown(formatted)
 
 
 # 全局样式设置
@@ -224,6 +367,9 @@ class CodeTraceAIWindow(QMainWindow):
         # 活跃的线程列表
         self._active_threads = []
 
+        # HTML 模式标志（用于 Markdown 渲染）
+        self._use_html = HAS_MARKDOWN
+
         # 创建中心部件
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -317,6 +463,33 @@ class CodeTraceAIWindow(QMainWindow):
                 self.chat_work_dir_label.setToolTip(str(cwd))
         except Exception:
             pass
+
+    def _append_chat_message(self, role, content):
+        """追加聊天消息，支持 Markdown 渲染"""
+        from PySide6.QtGui import QTextCursor
+
+        if role == "user":
+            # 用户消息：普通文本
+            self.chat_area.append(f"\n[用户]: {content}")
+        elif role == "ai":
+            if self._use_html:
+                # 使用 HTML/Markdown 渲染
+                cursor = self.chat_area.textCursor()
+                cursor.movePosition(QTextCursor.End)
+                self.chat_area.setTextCursor(cursor)
+
+                # 渲染 Markdown
+                html_content = format_chat_message(content)
+                self.chat_area.insertHtml(html_content)
+            else:
+                # 纯文本模式
+                self.chat_area.append(f"\n[AI]: {content}")
+        else:
+            self.chat_area.append(f"\n{content}")
+
+        # 滚动到底部
+        scrollbar = self.chat_area.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
     def _change_work_directory(self):
         """切换工作目录"""
@@ -476,9 +649,31 @@ class CodeTraceAIWindow(QMainWindow):
             )
             self.chat_area.clear()
             self.chat_area.append(f"--- 新对话 (ID: {self.chat_conversation_id}) ---")
-            self.chat_area.append("\n[系统] Claude Code 模式已启用")
-            self.chat_area.append("[系统] 可用工具: Read(读取文件), Write(写入文件), Bash(执行命令), Glob(搜索文件)")
-            self.chat_area.append("[系统] 当前工作目录: " + str(self.current_work_dir))
+
+            # 使用 Markdown 渲染系统消息
+            if self._use_html:
+                from PySide6.QtGui import QTextCursor
+                cursor = self.chat_area.textCursor()
+                cursor.movePosition(QTextCursor.End)
+                self.chat_area.setTextCursor(cursor)
+
+                system_info = """
+**Claude Code 模式已启用**
+
+**可用工具:**
+- `Read` - 读取文件内容
+- `Write` - 写入文件内容
+- `Bash` - 执行系统命令
+- `Glob` - 搜索文件
+
+**当前工作目录:** `{}`
+"""
+                html_content = format_chat_message(system_info.format(str(self.current_work_dir)))
+                self.chat_area.insertHtml(html_content)
+            else:
+                self.chat_area.append("\n[系统] Claude Code 模式已启用")
+                self.chat_area.append("[系统] 可用工具: Read(读取文件), Write(写入文件), Bash(执行命令), Glob(搜索文件)")
+                self.chat_area.append("[系统] 当前工作目录: " + str(self.current_work_dir))
         except Exception as e:
             self.chat_area.append(f"\n[错误] 创建对话失败: {e}")
 
@@ -561,6 +756,9 @@ class CodeTraceAIWindow(QMainWindow):
         # 使用 QTimer 定期检查结果
         from PySide6.QtCore import QTimer
 
+        # 保存流式输出的临时内容
+        stream_buffer = []
+
         def check_result():
             """检查线程结果（在主线程中执行）"""
             try:
@@ -568,7 +766,8 @@ class CodeTraceAIWindow(QMainWindow):
                 status, data = result
 
                 if status == "chunk":
-                    # 实时追加内容
+                    # 实时追加内容（流式模式）
+                    stream_buffer.append(data)
                     from PySide6.QtGui import QTextCursor
                     cursor = self.chat_area.textCursor()
                     cursor.movePosition(QTextCursor.End)
@@ -580,17 +779,30 @@ class CodeTraceAIWindow(QMainWindow):
                     # 继续检查
                     QTimer.singleShot(10, check_result)
                 elif status == "done":
-                    # 完成
+                    # 完成，如果有 Markdown 支持，重新渲染整个响应
+                    if self._use_html and stream_buffer:
+                        full_response = ''.join(stream_buffer)
+                        # 移除刚才的纯文本输出
+                        cursor = self.chat_area.textCursor()
+                        cursor.movePosition(QTextCursor.End)
+                        # 估算要删除的字符数（简单方法：删除到最后一个换行后的内容）
+                        # 更好的方法：使用 HTML 重新显示
+                        # 这里我们选择追加格式化的版本
+                        self.chat_area.append("\n\n")
+                        # 插入渲染后的 Markdown
+                        html_content = format_chat_message(full_response)
+                        self.chat_area.insertHtml(html_content)
+
                     self.chat_input.setEnabled(True)
                     self.chat_input.setFocus()
                 elif status == "error":
                     # 错误
                     if "timeout" in str(data).lower() or "timed out" in str(data).lower():
-                        self.chat_area.insertPlainText(f"\n[错误] 请求超时，请检查网络连接或稍后重试")
+                        self.chat_area.append(f"\n[错误] 请求超时，请检查网络连接或稍后重试")
                     elif "401" in str(data) or "authentication" in str(data).lower():
-                        self.chat_area.insertPlainText(f"\n[错误] API 密钥无效，请在'提供商管理'页面更新")
+                        self.chat_area.append(f"\n[错误] API 密钥无效，请在'提供商管理'页面更新")
                     else:
-                        self.chat_area.insertPlainText(f"\n[错误] {str(data)[:300]}")
+                        self.chat_area.append(f"\n[错误] {str(data)[:300]}")
                     self.chat_input.setEnabled(True)
                     self.chat_input.setFocus()
 

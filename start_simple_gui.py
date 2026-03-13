@@ -742,7 +742,7 @@ class CodeTraceAIWindow(QMainWindow):
                 )
                 return
 
-            # 获取 git 状态
+            # 获取已修改文件
             status_result = subprocess.run(
                 ["git", "status", "--short"],
                 capture_output=True,
@@ -750,9 +750,23 @@ class CodeTraceAIWindow(QMainWindow):
                 cwd=str(self.current_work_dir)
             )
 
-            changed_files = status_result.stdout.strip().split('\n') if status_result.stdout.strip() else []
+            modified_files = status_result.stdout.strip().split('\n') if status_result.stdout.strip() else []
 
-            if not changed_files or (len(changed_files) == 1 and changed_files[0] == ''):
+            # 获取未跟踪文件
+            untracked_result = subprocess.run(
+                ["git", "ls-files", "--others", "--exclude-standard"],
+                capture_output=True,
+                text=True,
+                cwd=str(self.current_work_dir)
+            )
+
+            untracked_files = untracked_result.stdout.strip().split('\n') if untracked_result.stdout.strip() else []
+
+            # 过滤掉空行
+            modified_files = [f for f in modified_files if f]
+            untracked_files = [f for f in untracked_files if f]
+
+            if not modified_files and not untracked_files:
                 QMessageBox.information(
                     None,
                     "没有更改",
@@ -761,21 +775,46 @@ class CodeTraceAIWindow(QMainWindow):
                 return
 
             # 创建提交对话框
-            from PySide6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QCheckBox, QDialogButtonBox
+            from PySide6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QCheckBox, QDialogButtonBox, QScrollArea, QWidget
 
             dialog = QDialog()
             dialog.setWindowTitle("提交代码")
-            dialog.setMinimumWidth(600)
+            dialog.setMinimumWidth(700)
+            dialog.setMinimumHeight(500)
             dialog_layout = QVBoxLayout(dialog)
 
-            # 显示更改的文件
-            dialog_layout.addWidget(QLabel("待提交的文件:"))
+            # 已修改文件
+            if modified_files:
+                dialog_layout.addWidget(QLabel("已修改的文件:"))
+                modified_text = QTextEdit()
+                modified_text.setMaximumHeight(100)
+                modified_text.setReadOnly(True)
+                modified_text.setText('\n'.join(modified_files))
+                dialog_layout.addWidget(modified_text)
 
-            files_text = QTextEdit()
-            files_text.setMaximumHeight(150)
-            files_text.setReadOnly(True)
-            files_text.setText('\n'.join(changed_files))
-            dialog_layout.addWidget(files_text)
+            # 新增文件（带勾选）
+            if untracked_files:
+                dialog_layout.addWidget(QLabel("新增文件 (勾选要添加的文件):"))
+
+                # 创建滚动区域
+                scroll = QScrollArea()
+                scroll.setWidgetResizable(True)
+                scroll.setMaximumHeight(200)
+
+                checkbox_container = QWidget()
+                checkbox_layout = QVBoxLayout(checkbox_container)
+
+                self.untracked_checkboxes = []
+
+                for file_path in untracked_files:
+                    checkbox = QCheckBox(file_path)
+                    checkbox.setChecked(True)  # 默认勾选
+                    checkbox_layout.addWidget(checkbox)
+                    self.untracked_checkboxes.append(checkbox)
+
+                checkbox_layout.addStretch()
+                scroll.setWidget(checkbox_container)
+                dialog_layout.addWidget(scroll)
 
             # 提交消息输入
             dialog_layout.addWidget(QLabel("提交消息:"))
@@ -804,23 +843,40 @@ class CodeTraceAIWindow(QMainWindow):
                 QMessageBox.warning(None, "提示", "请输入提交消息")
                 return
 
+            # 添加已修改的文件
+            if modified_files:
+                self.chat_area.append(f"\n[系统] 正在添加已修改的文件...")
+
+            # 添加选中新增的文件
+            selected_untracked = []
+            if hasattr(self, 'untracked_checkboxes'):
+                for checkbox in self.untracked_checkboxes:
+                    if checkbox.isChecked():
+                        selected_untracked.append(checkbox.text())
+
+            if selected_untracked:
+                self.chat_area.append(f"[系统] 正在添加 {len(selected_untracked)} 个新增文件...")
+
             # 执行 git add
-            self.chat_area.append(f"\n[系统] 正在添加文件到暂存区...")
+            all_files_to_add = modified_files + selected_untracked
 
-            add_result = subprocess.run(
-                ["git", "add", "."],
-                capture_output=True,
-                text=True,
-                cwd=str(self.current_work_dir)
-            )
+            if all_files_to_add:
+                # 逐个添加文件
+                for file_path in all_files_to_add:
+                    add_result = subprocess.run(
+                        ["git", "add", file_path],
+                        capture_output=True,
+                        text=True,
+                        cwd=str(self.current_work_dir)
+                    )
 
-            if add_result.returncode != 0:
-                QMessageBox.critical(
-                    None,
-                    "添加文件失败",
-                    f"Git add 失败:\n{add_result.stderr}"
-                )
-                return
+                    if add_result.returncode != 0:
+                        QMessageBox.critical(
+                            None,
+                            "添加文件失败",
+                            f"无法添加文件 {file_path}:\n{add_result.stderr}"
+                        )
+                        return
 
             # 执行 git commit
             self.chat_area.append(f"[系统] 正在提交更改...")
@@ -841,6 +897,10 @@ class CodeTraceAIWindow(QMainWindow):
                 return
 
             self.chat_area.append(f"[系统] 提交成功！")
+            self.chat_area.append(f"[系统] 提交消息: {commit_msg}")
+
+            if len(selected_untracked) > 0:
+                self.chat_area.append(f"[系统] 包含 {len(selected_untracked)} 个新增文件")
 
             # 检查是否需要推送
             if push_checkbox.isChecked():

@@ -13,7 +13,7 @@ from qfluentwidgets import (
     TextEdit, PlainTextEdit, PushButton,
     ComboBox, BodyLabel, StrongBodyLabel, ScrollArea,
     CardWidget, SimpleCardWidget, InfoBar, InfoBarPosition,
-    PillPushButton, ToolButton, FluentIcon
+    PillPushButton, ToolButton, FluentIcon, CheckBox
 )
 
 from ...services import (
@@ -217,6 +217,17 @@ class ChatView(QWidget):
         container = SimpleCardWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(16, 16, 16, 16)
+
+        # 自动提交选项
+        options_layout = QHBoxLayout()
+        
+        self.auto_commit_checkbox = CheckBox("自动提交代码")
+        self.auto_commit_checkbox.setChecked(False)
+        self.auto_commit_checkbox.setToolTip("勾选后，应用代码修改时会自动提交到 Git 仓库")
+        options_layout.addWidget(self.auto_commit_checkbox)
+        
+        options_layout.addStretch()
+        layout.addLayout(options_layout)
 
         # 输入框 - 使用自定义 MessageEdit 支持回车发送
         self.input_edit = MessageEdit()
@@ -518,3 +529,113 @@ class ChatView(QWidget):
             self.send_btn.setText("思考中...")
         else:
             self.send_btn.setText("发送")
+
+    def apply_code_with_auto_commit(self, file_path: str, content: str):
+        """
+        应用代码修改，并根据设置自动提交
+        
+        Args:
+            file_path: 文件路径
+            content: 文件内容
+        """
+        from pathlib import Path
+        
+        try:
+            # 写入文件
+            file_path_obj = Path(file_path)
+            file_path_obj.parent.mkdir(parents=True, exist_ok=True)
+            file_path_obj.write_text(content, encoding='utf-8')
+            
+            # 发送代码应用信号
+            self.codeApplied.emit({"file_path": file_path})
+            
+            # 如果勾选了自动提交，则执行 Git 提交
+            if self.auto_commit_checkbox.isChecked():
+                self._auto_commit_code(file_path)
+            else:
+                InfoBar.success(
+                    title="代码已应用",
+                    content=f"已将修改应用到: {file_path}",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self
+                )
+                
+        except Exception as e:
+            InfoBar.error(
+                title="应用代码失败",
+                content=f"错误: {str(e)}",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self
+            )
+
+    def _auto_commit_code(self, file_path: str):
+        """
+        自动提交代码到 Git 仓库
+        
+        Args:
+            file_path: 修改的文件路径
+        """
+        try:
+            # 导入 Git VCS
+            from ...vcs import GitVCSFactory
+            
+            # 获取工作目录
+            work_dir = self.work_dir or Path.cwd()
+            
+            # 检查是否是 Git 仓库
+            vcs = GitVCSFactory.create(str(work_dir))
+            if not vcs:
+                InfoBar.warning(
+                    title="无法自动提交",
+                    content="当前目录不是 Git 仓库",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self
+                )
+                return
+            
+            # 生成提交信息
+            commit_message = f"AI: 自动提交代码修改 - {Path(file_path).name}"
+            
+            # 执行提交
+            commit_hash = vcs.commit(commit_message, [file_path])
+            
+            if commit_hash:
+                InfoBar.success(
+                    title="代码已自动提交",
+                    content=f"文件: {file_path}\n提交: {commit_hash[:8]}",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self
+                )
+            else:
+                InfoBar.warning(
+                    title="自动提交失败",
+                    content="Git 提交失败，请检查是否有未提交的更改",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self
+                )
+                
+        except Exception as e:
+            InfoBar.error(
+                title="自动提交出错",
+                content=f"错误: {str(e)}",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self
+            )

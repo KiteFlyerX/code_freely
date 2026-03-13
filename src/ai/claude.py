@@ -333,6 +333,23 @@ class ClaudeAI(BaseAI):
 
         return text_generator(), tool_calls
 
+    async def chat_stream_collect_tools(
+        self,
+        messages: List[Message],
+        config: Optional[AIRequestConfig] = None
+    ) -> tuple[AsyncIterator[str], List[ToolCall]]:
+        """
+        流式聊天请求，同时收集工具调用（base.py 调用的方法）
+
+        Args:
+            messages: 消息列表
+            config: 请求配置
+
+        Returns:
+            tuple: (流式文本迭代器, 工具调用列表)
+        """
+        return await self.chat_stream_with_tools(messages, config)
+
     def validate_api_key(self) -> bool:
         """
         验证 API 密钥是否有效

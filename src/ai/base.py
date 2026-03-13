@@ -174,7 +174,12 @@ class BaseAI(ABC):
 
             # 显示工具调用信息
             for tool_call in response.tool_calls:
-                yield f"\n> 使用工具: {tool_call.name}"
+                # 格式化参数显示
+                args_str = ""
+                if tool_call.arguments:
+                    if isinstance(tool_call.arguments, dict):
+                        args_str = " ".join([f"{k}={v}" for k, v in list(tool_call.arguments.items())[:2]])
+                yield f"\n🔧 {tool_call.name} {args_str}"
 
             # 执行工具调用
             for tool_call in response.tool_calls:
@@ -196,39 +201,39 @@ class BaseAI(ABC):
                             if 'content' in data:
                                 content = data['content']
                                 if len(content) > 100:
-                                    yield f"[已读取 {len(content)} 字符]"
+                                    yield f"✓ 已读取 {len(content)} 字符"
                                 else:
-                                    yield f"[读取成功]"
+                                    yield f"✓ 读取成功"
                             elif 'output' in data:
                                 output = data['output']
                                 lines = output.split('\n')
                                 if len(lines) > 5:
-                                    yield f"[命令输出: {len(lines)} 行]"
+                                    yield f"✓ 命令输出: {len(lines)} 行"
                                 elif len(output) > 200:
-                                    yield f"[输出: {output[:100]}...]"
+                                    yield f"✓ 输出: {output[:100]}..."
                                 else:
                                     # 只显示前两行
                                     preview_lines = lines[:2]
                                     preview = '\n'.join(preview_lines)
                                     if len(lines) > 2:
                                         preview += f"\n... ({len(lines)-2} 更多行)"
-                                    yield f"[输出]\n{preview}"
+                                    yield f"✓ 输出:\n{preview}"
                             elif 'message' in data:
-                                yield f"[{data['message']}]"
+                                yield f"✓ {data['message']}"
                             else:
-                                yield f"[执行成功]"
+                                yield f"✓ 执行成功"
                         else:
-                            yield f"[执行成功]"
+                            yield f"✓ 执行成功"
                     elif isinstance(result, dict):
                         error = result.get('error', '未知错误')
                         if len(error) > 100:
                             error = error[:100] + "..."
-                        yield f"[错误: {error}]"
+                        yield f"✗ 错误: {error}"
                     else:
                         preview = result_str[:100]
                         if len(result_str) > 100:
                             preview += "..."
-                        yield f"[结果: {preview}]"
+                        yield f"→ 结果: {preview}"
 
                     # 添加工具结果消息
                     tool_message = Message(

@@ -342,123 +342,87 @@ class CodeTraceAIWindow(QMainWindow):
 
         # 禁用输入
         self.chat_input.setEnabled(False)
-        self.chat_area.append("\n[系统] 正在思考...")
+        thinking_text = "\n[系统] 正在思考..."
+        self.chat_area.append(thinking_text)
 
-        # 保存"正在思考"的位置，用于移除
-        thinking_marker = f"__THINKING_{len(content)}__"
+        # 保存"正在思考"的文本长度，用于移除
+        thinking_len = len(thinking_text)
 
-        # 使用 QThread 在后台发送消息
-        from PySide6.QtCore import QThread, QObject, Signal, QTimer
+        # 使用 Python 标准库的 threading 而不是 QThread
+        import threading
+        import queue
 
-        class ChatWorker(QObject):
-            finished = Signal(str)
-            error = Signal(str)
+        result_queue = queue.Queue()
 
-            def __init__(self, conversation_id, content):
-                super().__init__()
-                self.conversation_id = conversation_id
-                self.content = content
+        def send_in_thread():
+            """在线程中发送消息"""
+            import asyncio
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
 
-            def run(self):
-                import asyncio
-                try:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
+                async def send_with_retry():
+                    # 重试机制
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            message = await conversation_service.send_message(
+                                self.chat_conversation_id, content
+                            )
+                            return message.content
+                        except Exception as e:
+                            if attempt < max_retries - 1:
+                                print(f"[重试] 第 {attempt + 1} 次失败，{2**attempt}秒后重试...")
+                                await asyncio.sleep(2**attempt)
+                            else:
+                                raise
 
-                    async def send_with_retry():
-                        # 重试机制
-                        max_retries = 3
-                        for attempt in range(max_retries):
-                            try:
-                                message = await conversation_service.send_message(
-                                    self.conversation_id, self.content
-                                )
-                                return message.content
-                            except Exception as e:
-                                if attempt < max_retries - 1:
-                                    print(f"[重试] 第 {attempt + 1} 次失败，{2**attempt}秒后重试...")
-                                    await asyncio.sleep(2**attempt)
-                                else:
-                                    raise
+                response = loop.run_until_complete(send_with_retry())
+                loop.run_until_complete(loop.shutdown_asyncgens())
+                loop.close()
+                result_queue.put(("success", response))
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                result_queue.put(("error", str(e)))
 
-                    response = loop.run_until_complete(send_with_retry())
-                    loop.run_until_complete(loop.shutdown_asyncgens())
-                    loop.close()
-                    self.finished.emit(response)
-                except Exception as e:
-                    import traceback
-                    traceback.print_exc()
-                    self.error.emit(str(e))
-
-        # 创建并启动线程
-        thread = QThread()
-        thread.setObjectName("ChatWorkerThread")
-        worker = ChatWorker(self.chat_conversation_id, content)
-        worker.moveToThread(thread)
-
-        # 保存线程引用
-        self._active_threads.append(thread)
-
-        # 注意：所有回调都是在主线程中执行的（通过信号槽机制）
-        def on_finished(response):
-            # 在主线程中安全地更新 GUI
-            import re
-            text = self.chat_area.toPlainText()
-            # 移除"正在思考"文本
-            text = re.sub(r'\n\[系统\] 正在思考\.\.\.', '', text)
-            self.chat_area.setPlainText(text)
-            # 移动光标到末尾
-            cursor = self.chat_area.textCursor()
-            cursor.movePosition(cursor.End)
-            self.chat_area.setTextCursor(cursor)
-
-            self.chat_area.append(f"\n[AI]: {response}")
-            self.chat_input.setEnabled(True)
-            self.chat_input.setFocus()
-
-            # 清理线程
-            if thread in self._active_threads:
-                self._active_threads.remove(thread)
-            thread.quit()
-            thread.wait(3000)
-            thread.deleteLater()
-
-        def on_error(error_msg):
-            # 在主线程中安全地更新 GUI
-            import re
-            text = self.chat_area.toPlainText()
-            # 移除"正在思考"文本
-            text = re.sub(r'\n\[系统\] 正在思考\.\.\.', '', text)
-            self.chat_area.setPlainText(text)
-            # 移动光标到末尾
-            cursor = self.chat_area.textCursor()
-            cursor.movePosition(cursor.End)
-            self.chat_area.setTextCursor(cursor)
-
-            if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
-                self.chat_area.append(f"\n[错误] 请求超时，请检查网络连接或稍后重试")
-            elif "401" in error_msg or "authentication" in error_msg.lower():
-                self.chat_area.append(f"\n[错误] API 密钥无效，请在'提供商管理'页面更新")
-            else:
-                self.chat_area.append(f"\n[错误] {error_msg[:200]}")
-            self.chat_input.setEnabled(True)
-            self.chat_input.setFocus()
-
-            # 清理线程
-            if thread in self._active_threads:
-                self._active_threads.remove(thread)
-            thread.quit()
-            thread.wait(3000)
-            thread.deleteLater()
-
-        # 使用 QTimer 延迟调用，确保线程事件循环已启动
-        def start_worker():
-            QTimer.singleShot(50, worker.run)
-
-        thread.started.connect(start_worker)
-        worker.finished.connect(on_finished)
-        worker.error.connect(on_error)
+        # 启动线程
+        thread = threading.Thread(target=send_in_thread, daemon=True)
         thread.start()
+
+        # 使用 QTimer 定期检查结果
+        from PySide6.QtCore import QTimer
+
+        def check_result():
+            """检查线程结果（在主线程中执行）"""
+            try:
+                result = result_queue.get_nowait()
+                status, data = result
+
+                # 移除"正在思考"文本
+                current_text = self.chat_area.toPlainText()
+                if current_text.endswith(thinking_text):
+                    new_text = current_text[:-thinking_len]
+                    self.chat_area.setPlainText(new_text)
+
+                if status == "success":
+                    self.chat_area.append(f"\n[AI]: {data}")
+                else:
+                    if "timeout" in str(data).lower() or "timed out" in str(data).lower():
+                        self.chat_area.append(f"\n[错误] 请求超时，请检查网络连接或稍后重试")
+                    elif "401" in str(data) or "authentication" in str(data).lower():
+                        self.chat_area.append(f"\n[错误] API 密钥无效，请在'提供商管理'页面更新")
+                    else:
+                        self.chat_area.append(f"\n[错误] {str(data)[:200]}")
+
+                self.chat_input.setEnabled(True)
+                self.chat_input.setFocus()
+            except queue.Empty:
+                # 还没有结果，继续检查
+                QTimer.singleShot(100, check_result)
+
+        # 100ms 后开始检查
+        QTimer.singleShot(100, check_result)
 
     def create_history_page(self):
         """创建历史页面"""

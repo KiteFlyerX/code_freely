@@ -116,24 +116,31 @@ class ConversationService:
             MessageModel: AI 响应消息
         """
         # 保存用户消息
-        self._message_repo.create(
+        user_message = self._message_repo.create(
             conversation_id=conversation_id,
             role=MessageRole.USER.value,
             content=content,
         )
 
-        # 获取对话历史
+        # 获取对话历史（不包括刚刚保存的用户消息，手动添加）
         history = self._message_repo.get_by_conversation(conversation_id)
+        # 移除最后一个（刚保存的用户消息），因为我们会手动添加
+        history = history[:-1]
 
-        # 转换为 AI 消息格式
-        messages = [
-            Message(
+        # 构建消息列表
+        messages = []
+        # 添加历史消息
+        for msg in history:
+            messages.append(Message(
                 role=MessageRole(msg.role),
                 content=msg.content,
                 timestamp=msg.timestamp,
-            )
-            for msg in history
-        ]
+            ))
+        # 添加当前用户消息
+        messages.append(Message(
+            role=MessageRole.USER,
+            content=content,
+        ))
 
         # 获取活动提供商的配置
         from .provider_service import provider_manager
@@ -217,18 +224,25 @@ class ConversationService:
             content=content,
         )
 
-        # 获取对话历史（不包括刚刚保存的用户消息，因为需要 AI 格式）
+        # 获取对话历史（不包括刚刚保存的用户消息）
         history = self._message_repo.get_by_conversation(conversation_id)
+        # 移除最后一个（刚保存的用户消息）
+        history = history[:-1]
 
-        # 转换为 AI 消息格式
-        messages = [
-            Message(
+        # 构建消息列表
+        messages = []
+        # 添加历史消息
+        for msg in history:
+            messages.append(Message(
                 role=MessageRole(msg.role),
                 content=msg.content,
                 timestamp=msg.timestamp,
-            )
-            for msg in history
-        ]
+            ))
+        # 添加当前用户消息
+        messages.append(Message(
+            role=MessageRole.USER,
+            content=content,
+        ))
 
         # 获取工具配置
         tools = tool_registry.get_schemas()
@@ -324,18 +338,25 @@ class ConversationService:
             content=content,
         )
 
-        # 获取对话历史（不包括刚刚保存的用户消息，因为需要 AI 格式）
+        # 获取对话历史（不包括刚刚保存的用户消息）
         history = self._message_repo.get_by_conversation(conversation_id)
+        # 移除最后一个（刚保存的用户消息）
+        history = history[:-1]
 
-        # 转换为 AI 消息格式
-        messages = [
-            Message(
+        # 构建消息列表
+        messages = []
+        # 添加历史消息
+        for msg in history:
+            messages.append(Message(
                 role=MessageRole(msg.role),
                 content=msg.content,
                 timestamp=msg.timestamp,
-            )
-            for msg in history
-        ]
+            ))
+        # 添加当前用户消息
+        messages.append(Message(
+            role=MessageRole.USER,
+            content=content,
+        ))
 
         # 获取活动提供商的配置
         from .provider_service import provider_manager

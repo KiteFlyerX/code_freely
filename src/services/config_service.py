@@ -42,6 +42,7 @@ class AppConfig:
     auto_commit: bool = True
     create_temp_branch: bool = True
     theme: str = "dark"  # light, dark, auto
+    last_conversation_id: Optional[int] = None  # 上次的对话 ID
 
     def __post_init__(self):
         if self.ai is None:
@@ -55,6 +56,7 @@ class AppConfig:
             "auto_commit": self.auto_commit,
             "create_temp_branch": self.create_temp_branch,
             "theme": self.theme,
+            "last_conversation_id": self.last_conversation_id,
         }
 
     @classmethod
@@ -67,6 +69,7 @@ class AppConfig:
             auto_commit=data.get("auto_commit", True),
             create_temp_branch=data.get("create_temp_branch", True),
             theme=data.get("theme", "dark"),
+            last_conversation_id=data.get("last_conversation_id"),
         )
 
 

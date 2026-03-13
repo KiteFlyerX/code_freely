@@ -679,6 +679,68 @@ class CodeTraceAIWindow(QMainWindow):
         # 检查提供商配置
         self._check_chat_provider()
 
+        # 恢复上次的对话
+        self._restore_last_conversation()
+
+    def _restore_last_conversation(self):
+        """恢复上次的对话"""
+        try:
+            config = config_service.get_config()
+            last_id = config.last_conversation_id
+
+            if last_id:
+                # 获取对话信息
+                conv = conversation_service.get_conversation(last_id)
+                if conv:
+                    self.chat_conversation_id = last_id
+                    # 加载历史消息
+                    messages = conversation_service.get_messages(last_id)
+
+                    self.chat_area.clear()
+                    self.chat_area.append(f"--- 恢复对话 (ID: {last_id}) ---")
+
+                    # 显示历史消息
+                    for msg in messages:
+                        if msg.role == "user":
+                            self.chat_area.append(f"\n[用户]: {msg.content}")
+                        elif msg.role == "assistant":
+                            if self._use_html:
+                                html_content = format_chat_message(msg.content)
+                                self.chat_area.append(html_content)
+                            else:
+                                self.chat_area.append(f"\n[AI]: {msg.content}")
+
+                    # 显示系统消息
+                    if self._use_html:
+                        from PySide6.QtGui import QTextCursor
+                        cursor = self.chat_area.textCursor()
+                        cursor.movePosition(QTextCursor.End)
+                        self.chat_area.setTextCursor(cursor)
+
+                        system_info = """
+**Claude Code 模式已启用**
+
+可用工具:
+- Read - 读取文件内容
+- Write - 写入文件内容
+- Bash - 执行系统命令
+- Glob - 搜索文件
+"""
+                        html_content = format_chat_message(system_info.format(str(self.current_work_dir)))
+                        self.chat_area.append(html_content)
+                    else:
+                        self.chat_area.append("[系统] Claude Code 模式已启用")
+                        self.chat_area.append("[系统] 当前工作目录: " + str(self.current_work_dir))
+                else:
+                    # 对话不存在，创建新对话
+                    self._on_new_chat()
+            else:
+                # 没有上次的对话，创建新对话
+                self._on_new_chat()
+        except Exception as e:
+            print(f"恢复对话失败: {e}")
+            self._on_new_chat()
+
     def _check_chat_provider(self):
         """检查聊天提供商配置"""
         try:
@@ -1691,6 +1753,13 @@ class CodeTraceAIWindow(QMainWindow):
 
     def closeEvent(self, event):
         """窗口关闭事件"""
+        # 保存当前对话 ID
+        if hasattr(self, 'chat_conversation_id') and self.chat_conversation_id:
+            try:
+                config_service.update_app_config(last_conversation_id=self.chat_conversation_id)
+            except Exception as e:
+                print(f"保存对话 ID 失败: {e}")
+
         # 等待所有活跃线程完成
         for thread in self._active_threads:
             if thread.isRunning():

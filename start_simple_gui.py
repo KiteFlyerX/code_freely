@@ -309,11 +309,14 @@ class CodeTraceAIWindow(QMainWindow):
             )
             self.chat_area.clear()
             self.chat_area.append(f"--- 新对话 (ID: {self.chat_conversation_id}) ---")
+            self.chat_area.append("\n[系统] Claude Code 模式已启用")
+            self.chat_area.append("[系统] 可用工具: Read(读取文件), Write(写入文件), Bash(执行命令), Glob(搜索文件)")
+            self.chat_area.append("[系统] 当前工作目录: " + str(self.current_work_dir))
         except Exception as e:
             self.chat_area.append(f"\n[错误] 创建对话失败: {e}")
 
     def _on_send_chat_message(self):
-        """发送聊天消息"""
+        """发送聊天消息（带工具调用，类似 Claude Code）"""
         content = self.chat_input.toPlainText().strip()
         if not content:
             return
@@ -348,36 +351,29 @@ class CodeTraceAIWindow(QMainWindow):
         # 保存"正在思考"的文本长度，用于移除
         thinking_len = len(thinking_text)
 
-        # 使用 Python 标准库的 threading 而不是 QThread
+        # 使用 Python 标准库的 threading
         import threading
         import queue
 
         result_queue = queue.Queue()
 
         def send_in_thread():
-            """在线程中发送消息"""
+            """在线程中发送消息（使用工具调用）"""
             import asyncio
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
-                async def send_with_retry():
-                    # 重试机制
-                    max_retries = 3
-                    for attempt in range(max_retries):
-                        try:
-                            message = await conversation_service.send_message(
-                                self.chat_conversation_id, content
-                            )
-                            return message.content
-                        except Exception as e:
-                            if attempt < max_retries - 1:
-                                print(f"[重试] 第 {attempt + 1} 次失败，{2**attempt}秒后重试...")
-                                await asyncio.sleep(2**attempt)
-                            else:
-                                raise
+                async def send_with_tools():
+                    # 使用带工具调用的方法
+                    full_response = ""
+                    async for chunk in conversation_service.send_message_with_tools(
+                        self.chat_conversation_id, content, self.current_work_dir
+                    ):
+                        full_response += chunk
+                    return full_response
 
-                response = loop.run_until_complete(send_with_retry())
+                response = loop.run_until_complete(send_with_tools())
                 loop.run_until_complete(loop.shutdown_asyncgens())
                 loop.close()
                 result_queue.put(("success", response))
@@ -413,7 +409,7 @@ class CodeTraceAIWindow(QMainWindow):
                     elif "401" in str(data) or "authentication" in str(data).lower():
                         self.chat_area.append(f"\n[错误] API 密钥无效，请在'提供商管理'页面更新")
                     else:
-                        self.chat_area.append(f"\n[错误] {str(data)[:200]}")
+                        self.chat_area.append(f"\n[错误] {str(data)[:300]}")
 
                 self.chat_input.setEnabled(True)
                 self.chat_input.setFocus()

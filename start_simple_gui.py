@@ -27,14 +27,25 @@ try:
     from src.database import init_database
     from src.services import (
         config_service, conversation_service,
-        provider_manager, PROVIDER_PRESETS, ProviderConfig, ProviderType
+        provider_manager, ProviderConfig, ProviderType
     )
+    # 尝试导入 PROVIDER_PRESETS，如果失败则使用空列表
+    try:
+        from src.services import PROVIDER_PRESETS
+    except ImportError:
+        PROVIDER_PRESETS = []
+        print("Warning: PROVIDER_PRESETS not available")
     from src.services.bug_service import bug_service, BugCreateInfo
     from src.services.knowledge_service import knowledge_service, KnowledgeCreateInfo
     init_database()
     print("Services loaded successfully")
 except Exception as e:
     print(f"Warning: Some services failed to load: {e}")
+    # 设置默认值避免程序崩溃
+    PROVIDER_PRESETS = []
+    provider_manager = None
+    config_service = None
+    conversation_service = None
 
 # 简化的主窗口
 class CodeTraceAIWindow(QMainWindow):
@@ -568,15 +579,18 @@ class CodeTraceAIWindow(QMainWindow):
 
         # 按类别分组显示预设
         categories = {}
-        for preset in PROVIDER_PRESETS:
-            if preset.category not in categories:
-                categories[preset.category] = []
-            categories[preset.category].append(preset)
+        if PROVIDER_PRESETS:
+            for preset in PROVIDER_PRESETS:
+                if preset.category not in categories:
+                    categories[preset.category] = []
+                categories[preset.category].append(preset)
 
-        for category, presets in categories.items():
-            preset_list.addItem(f"--- {category.upper()} ---")
-            for preset in presets:
-                preset_list.addItem(f"  {preset.name} ({preset.id})")
+            for category, presets in categories.items():
+                preset_list.addItem(f"--- {category.upper()} ---")
+                for preset in presets:
+                    preset_list.addItem(f"  {preset.name} ({preset.id})")
+        else:
+            preset_list.addItem("  (无可用预设)")
 
         layout.addWidget(preset_list)
 

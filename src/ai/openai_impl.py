@@ -4,7 +4,8 @@ OpenAI AI 实现
 """
 import asyncio
 from typing import AsyncIterator, List, Optional, Dict, Any
-from openai import AsyncOpenAI, httpx
+from openai import AsyncOpenAI
+import httpx
 
 from .base import BaseAI, Message, MessageRole, AIResponse, AIRequestConfig
 

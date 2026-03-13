@@ -314,6 +314,12 @@ class CodeTraceAIWindow(QMainWindow):
             self.chat_area.append(f"\n[错误] 提供商 '{provider.name}' 的 API 密钥无效")
             return
 
+        # 确保有对话 ID
+        if not hasattr(self, 'chat_conversation_id') or self.chat_conversation_id is None:
+            self._on_new_chat()
+            if not hasattr(self, 'chat_conversation_id') or self.chat_conversation_id is None:
+                return
+
         # 显示用户消息
         self.chat_area.append(f"\n[用户]: {content}")
 
@@ -363,6 +369,13 @@ class CodeTraceAIWindow(QMainWindow):
         worker.moveToThread(thread)
 
         def on_finished(response):
+            # 移除 "正在思考..." 提示
+            cursor = self.chat_area.textCursor()
+            cursor.movePosition(cursor.End)
+            cursor.select(cursor.LineUnderCursor)
+            if cursor.selectedText() == "[系统] 正在思考...":
+                cursor.removeSelectedText()
+                cursor.deletePreviousChar()
             self.chat_area.append(f"\n[AI]: {response}")
             self.chat_input.setEnabled(True)
             self.chat_input.setFocus()
@@ -370,6 +383,13 @@ class CodeTraceAIWindow(QMainWindow):
             thread.deleteLater()
 
         def on_error(error_msg):
+            # 移除 "正在思考..." 提示
+            cursor = self.chat_area.textCursor()
+            cursor.movePosition(cursor.End)
+            cursor.select(cursor.LineUnderCursor)
+            if cursor.selectedText() == "[系统] 正在思考...":
+                cursor.removeSelectedText()
+                cursor.deletePreviousChar()
             if "401" in error_msg or "authentication" in error_msg.lower():
                 self.chat_area.append(f"\n[错误] API 密钥无效，请在'提供商管理'页面更新")
             else:

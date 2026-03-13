@@ -541,6 +541,21 @@ class CodeTraceAIWindow(QMainWindow):
 
         toolbar.addStretch()
 
+        # 自动提交复选框
+        try:
+            cfg = config_service.get_config()
+            auto_commit_checked = cfg.auto_commit
+        except:
+            auto_commit_checked = True
+
+        self.toolbar_auto_commit_checkbox = QCheckBox("自动提交")
+        self.toolbar_auto_commit_checkbox.setChecked(auto_commit_checked)
+        self.toolbar_auto_commit_checkbox.setToolTip("修改代码后自动提交到版本控制")
+        self.toolbar_auto_commit_checkbox.stateChanged.connect(self._toggle_auto_commit)
+        toolbar.addWidget(self.toolbar_auto_commit_checkbox)
+
+        toolbar.addWidget(QLabel("|"))
+
         new_btn = QPushButton("新建对话")
         new_btn.clicked.connect(self._on_new_chat)
         toolbar.addWidget(new_btn)
@@ -1714,6 +1729,19 @@ class CodeTraceAIWindow(QMainWindow):
         from PySide6.QtCore import Qt
         is_checked = (state == Qt.Checked.value)
         config_service.update_app_config(auto_commit=is_checked)
+
+        # 同步工具栏的复选框状态
+        if hasattr(self, 'toolbar_auto_commit_checkbox'):
+            # 阻止信号触发循环
+            self.toolbar_auto_commit_checkbox.blockSignals(True)
+            self.toolbar_auto_commit_checkbox.setChecked(is_checked)
+            self.toolbar_auto_commit_checkbox.blockSignals(False)
+
+        # 同步设置页面的复选框状态
+        if hasattr(self, 'auto_commit_checkbox'):
+            self.auto_commit_checkbox.blockSignals(True)
+            self.auto_commit_checkbox.setChecked(is_checked)
+            self.auto_commit_checkbox.blockSignals(False)
 
     def _toggle_temp_branch(self, state):
         """切换临时分支选项"""

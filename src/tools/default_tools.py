@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from .base import BaseTool, ToolCategory, ToolResult, tool_registry
+from .base import BaseTool, ToolCategory, ToolResult, ToolParameter, tool_registry
 
 
 class Read(BaseTool):
@@ -22,26 +22,26 @@ class Read(BaseTool):
         self.category = ToolCategory.FILE
         self.description = "读取文件内容。如果需要查看特定文件，请使用此工具。"
         self.parameters = [
-            {
-                "name": "file_path",
-                "type": "string",
-                "description": "要读取的文件路径（相对于当前工作目录的相对路径，或绝对路径）",
-                "required": True,
-            },
-            {
-                "name": "limit",
-                "type": "integer",
-                "description": "可选，读取的最大行数。默认读取整个文件",
-                "required": False,
-                "default": None,
-            },
-            {
-                "name": "offset",
-                "type": "integer",
-                "description": "可选，从第几行开始读取。默认从第1行开始",
-                "required": False,
-                "default": 1,
-            },
+            ToolParameter(
+                name="file_path",
+                type="string",
+                description="要读取的文件路径（相对于当前工作目录的相对路径，或绝对路径）",
+                required=True,
+            ),
+            ToolParameter(
+                name="limit",
+                type="integer",
+                description="可选，读取的最大行数。默认读取整个文件",
+                required=False,
+                default=None,
+            ),
+            ToolParameter(
+                name="offset",
+                type="integer",
+                description="可选，从第几行开始读取。默认从第1行开始",
+                required=False,
+                default=1,
+            ),
         ]
 
     def execute(self, file_path: str, limit: Optional[int] = None, offset: int = 1) -> ToolResult:
@@ -114,18 +114,18 @@ class Write(BaseTool):
         self.category = ToolCategory.FILE
         self.description = "将内容写入文件。如果文件已存在，将会覆盖整个文件。如果要修改现有文件，请先使用 Read 工具读取文件内容。"
         self.parameters = [
-            {
-                "name": "file_path",
-                "type": "string",
-                "description": "要写入的文件路径（相对于当前工作目录的相对路径，或绝对路径）",
-                "required": True,
-            },
-            {
-                "name": "content",
-                "type": "string",
-                "description": "要写入的内容",
-                "required": True,
-            },
+            ToolParameter(
+                name="file_path",
+                type="string",
+                description="要写入的文件路径（相对于当前工作目录的相对路径，或绝对路径）",
+                required=True,
+            ),
+            ToolParameter(
+                name="content",
+                type="string",
+                description="要写入的内容",
+                required=True,
+            ),
         ]
 
     def execute(self, file_path: str, content: str) -> ToolResult:
@@ -174,19 +174,19 @@ class Bash(BaseTool):
         self.category = ToolCategory.SYSTEM
         self.description = "在 shell 中执行命令。用于执行系统命令、git 操作、运行测试等。"
         self.parameters = [
-            {
-                "name": "command",
-                "type": "string",
-                "description": "要执行的命令",
-                "required": True,
-            },
-            {
-                "name": "timeout",
-                "type": "integer",
-                "description": "可选，命令超时时间（秒）。默认120秒",
-                "required": False,
-                "default": 120,
-            },
+            ToolParameter(
+                name="command",
+                type="string",
+                description="要执行的命令",
+                required=True,
+            ),
+            ToolParameter(
+                name="timeout",
+                type="integer",
+                description="可选，命令超时时间（秒）。默认120秒",
+                required=False,
+                default=120,
+            ),
         ]
 
     def execute(self, command: str, timeout: int = 120) -> ToolResult:
@@ -239,12 +239,12 @@ class Glob(BaseTool):
         self.category = ToolCategory.SEARCH
         self.description = "使用 glob 模式搜索文件。例如: **/*.py 搜索所有 Python 文件，src/**/*.tsx 搜索 src 目录下的所有 TSX 文件。"
         self.parameters = [
-            {
-                "name": "pattern",
-                "type": "string",
-                "description": "glob 搜索模式。支持 ** 递归匹配，* 单级匹配等",
-                "required": True,
-            },
+            ToolParameter(
+                name="pattern",
+                type="string",
+                description="glob 搜索模式。支持 ** 递归匹配，* 单级匹配等",
+                required=True,
+            ),
         ]
 
     def execute(self, pattern: str) -> ToolResult:

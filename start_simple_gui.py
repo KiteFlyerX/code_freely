@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QPushButton, QTextEdit,
     QTabWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QListWidget, QStackedWidget,
-    QInputDialog, QMessageBox, QLineEdit, QFileDialog, QSplitter, QStatusBar, QSizePolicy
+    QInputDialog, QMessageBox, QLineEdit, QFileDialog, QSplitter, QStatusBar
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QPalette, QColor, QTextDocument
@@ -539,31 +539,6 @@ class CodeTraceAIWindow(QMainWindow):
         except Exception as e:
             self.statusBar.showMessage(f"工作目录: {str(self.current_work_dir)}")
 
-        # 同时更新聊天页面的显示
-        self._update_chat_work_dir_display()
-
-    def _update_chat_work_dir_display(self):
-        """更新聊天页面的工作目录显示"""
-        try:
-            if hasattr(self, 'chat_work_dir_label'):
-                from pathlib import Path
-                cwd = Path.cwd()
-                home = Path.home()
-
-                if cwd.is_relative_to(home):
-                    display_path = f"~/{cwd.relative_to(home)}"
-                else:
-                    display_path = str(cwd)
-
-                # 限制显示长度
-                if len(display_path) > 60:
-                    display_path = "..." + display_path[-57:]
-
-                self.chat_work_dir_label.setText(f"📂 {display_path}")
-                self.chat_work_dir_label.setToolTip(str(cwd))
-        except Exception:
-            pass
-
     def _append_chat_message(self, role, content):
         """追加聊天消息，支持 Markdown 渲染"""
         from PySide6.QtGui import QTextCursor
@@ -631,21 +606,6 @@ class CodeTraceAIWindow(QMainWindow):
         toolbar = QHBoxLayout()
         toolbar.addWidget(QLabel("AI 对话"))
 
-        # 工作目录显示
-        toolbar.addWidget(QLabel("|"))
-        self.chat_work_dir_label = QLabel()
-        self.chat_work_dir_label.setStyleSheet("color: #666; font-size: 10px;")
-        self.chat_work_dir_label.setMinimumWidth(200)
-        self.chat_work_dir_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.chat_work_dir_label.setToolTip("当前工作目录")
-        toolbar.addWidget(self.chat_work_dir_label)
-
-        change_dir_small_btn = QPushButton("📂")
-        change_dir_small_btn.setMaximumWidth(30)
-        change_dir_small_btn.setToolTip("切换工作目录")
-        change_dir_small_btn.clicked.connect(self._change_work_directory)
-        toolbar.addWidget(change_dir_small_btn)
-
         # 提供商状态
         toolbar.addWidget(QLabel("|"))
         self.chat_status_label = QLabel("未配置提供商")
@@ -664,9 +624,6 @@ class CodeTraceAIWindow(QMainWindow):
         toolbar.addWidget(commit_btn)
 
         layout.addLayout(toolbar)
-
-        # 初始化工作目录显示
-        self._update_chat_work_dir_display()
 
         # 聊天区域
         self.chat_area = QTextEdit()

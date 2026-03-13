@@ -1385,6 +1385,22 @@ class CodeTraceAIWindow(QMainWindow):
             push_checkbox = QCheckBox(push_label)
             dialog_layout.addWidget(push_checkbox)
 
+            # 自动提交选项
+            try:
+                cfg = config_service.get_config()
+                auto_commit_default = cfg.auto_commit
+            except:
+                auto_commit_default = True
+            auto_commit_checkbox = QCheckBox("记住选择，下次自动提交")
+            auto_commit_checkbox.setChecked(auto_commit_default)
+            auto_commit_checkbox.setToolTip("勾选后，下次修改代码时会自动提交（可随时在设置中更改）")
+            dialog_layout.addWidget(auto_commit_checkbox)
+
+            # 说明文字
+            info_label = QLabel("提示: 可在「设置」页面中更改默认行为")
+            info_label.setStyleSheet("color: #888; font-size: 9pt;")
+            dialog_layout.addWidget(info_label)
+
             # 按钮
             buttons = QDialogButtonBox(
                 QDialogButtonBox.Ok | QDialogButtonBox.Cancel
@@ -1395,6 +1411,12 @@ class CodeTraceAIWindow(QMainWindow):
 
             if dialog.exec() != QDialog.Accepted:
                 return
+
+            # 保存自动提交配置
+            try:
+                config_service.update_app_config(auto_commit=auto_commit_checkbox.isChecked())
+            except Exception as e:
+                print(f"保存配置失败: {e}")
 
             commit_msg = commit_msg_edit.text().strip()
             if not commit_msg:

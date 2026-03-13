@@ -755,6 +755,7 @@ class CodeTraceAIWindow(QMainWindow):
 
         # 使用 QTimer 定期检查结果
         from PySide6.QtCore import QTimer
+        from PySide6.QtGui import QTextCursor
 
         # 保存流式输出的临时内容
         stream_buffer = []
@@ -768,7 +769,6 @@ class CodeTraceAIWindow(QMainWindow):
                 if status == "chunk":
                     # 实时追加内容（流式模式）
                     stream_buffer.append(data)
-                    from PySide6.QtGui import QTextCursor
                     cursor = self.chat_area.textCursor()
                     cursor.movePosition(QTextCursor.End)
                     self.chat_area.setTextCursor(cursor)
@@ -782,13 +782,8 @@ class CodeTraceAIWindow(QMainWindow):
                     # 完成，如果有 Markdown 支持，重新渲染整个响应
                     if self._use_html and stream_buffer:
                         full_response = ''.join(stream_buffer)
-                        # 移除刚才的纯文本输出
-                        cursor = self.chat_area.textCursor()
-                        cursor.movePosition(QTextCursor.End)
-                        # 估算要删除的字符数（简单方法：删除到最后一个换行后的内容）
-                        # 更好的方法：使用 HTML 重新显示
-                        # 这里我们选择追加格式化的版本
-                        self.chat_area.append("\n\n")
+                        # 追加格式化的版本
+                        self.chat_area.append("\n")
                         # 插入渲染后的 Markdown
                         html_content = format_chat_message(full_response)
                         self.chat_area.insertHtml(html_content)

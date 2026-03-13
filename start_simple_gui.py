@@ -526,6 +526,8 @@ class CodeTraceAIWindow(QMainWindow):
 
     def create_chat_page(self):
         """创建聊天页面"""
+        from PySide6.QtWidgets import QCheckBox
+
         page = QWidget()
         layout = QVBoxLayout(page)
 

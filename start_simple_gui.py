@@ -559,7 +559,7 @@ class CodeTraceAIWindow(QMainWindow):
                 if len(display_path) > 60:
                     display_path = "..." + display_path[-57:]
 
-                self.chat_work_dir_label.setText(f"📁 {display_path}")
+                self.chat_work_dir_label.setText(f"📂 {display_path}")
                 self.chat_work_dir_label.setToolTip(str(cwd))
         except Exception:
             pass
@@ -640,7 +640,7 @@ class CodeTraceAIWindow(QMainWindow):
         self.chat_work_dir_label.setToolTip("当前工作目录")
         toolbar.addWidget(self.chat_work_dir_label)
 
-        change_dir_small_btn = QPushButton("📁")
+        change_dir_small_btn = QPushButton("📂")
         change_dir_small_btn.setMaximumWidth(30)
         change_dir_small_btn.setToolTip("切换工作目录")
         change_dir_small_btn.clicked.connect(self._change_work_directory)

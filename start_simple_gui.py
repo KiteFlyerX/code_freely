@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QPushButton, QTextEdit,
     QTabWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QListWidget, QStackedWidget,
-    QInputDialog, QMessageBox, QLineEdit, QFileDialog, QSplitter, QStatusBar
+    QInputDialog, QMessageBox, QLineEdit, QFileDialog, QSplitter, QStatusBar, QSizePolicy
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QPalette, QColor, QTextDocument
@@ -556,8 +556,8 @@ class CodeTraceAIWindow(QMainWindow):
                     display_path = str(cwd)
 
                 # 限制显示长度
-                if len(display_path) > 35:
-                    display_path = "..." + display_path[-32:]
+                if len(display_path) > 60:
+                    display_path = "..." + display_path[-57:]
 
                 self.chat_work_dir_label.setText(f"📁 {display_path}")
                 self.chat_work_dir_label.setToolTip(str(cwd))
@@ -635,7 +635,8 @@ class CodeTraceAIWindow(QMainWindow):
         toolbar.addWidget(QLabel("|"))
         self.chat_work_dir_label = QLabel()
         self.chat_work_dir_label.setStyleSheet("color: #666; font-size: 10px;")
-        self.chat_work_dir_label.setMaximumWidth(300)
+        self.chat_work_dir_label.setMinimumWidth(200)
+        self.chat_work_dir_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.chat_work_dir_label.setToolTip("当前工作目录")
         toolbar.addWidget(self.chat_work_dir_label)
 

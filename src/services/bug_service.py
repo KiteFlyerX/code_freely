@@ -42,7 +42,7 @@ class BugDetail:
     fix_description: Optional[str]
     created_at: datetime
     updated_at: datetime
-    fixed_at: Optional datetime]
+    fixed_at: Optional[datetime]
     code_change_id: Optional[int]
     fix_code_change_id: Optional[int]
 

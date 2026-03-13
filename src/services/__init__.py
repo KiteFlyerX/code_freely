@@ -36,6 +36,9 @@ from .knowledge_service import (
     knowledge_service,
 )
 
+# 从 models 导入枚举类型
+from ..models import BugStatus, ReviewStatus
+
 __all__ = [
     "AIConfig",
     "AppConfig",
@@ -60,4 +63,6 @@ __all__ = [
     "KnowledgeStats",
     "KnowledgeService",
     "knowledge_service",
+    "BugStatus",
+    "ReviewStatus",
 ]

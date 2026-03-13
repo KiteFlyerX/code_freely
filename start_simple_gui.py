@@ -4,6 +4,7 @@ CodeTraceAI GUI - 简化工作版本
 """
 import sys
 import os
+import subprocess
 from pathlib import Path
 
 # 设置路径
@@ -206,6 +207,11 @@ class CodeTraceAIWindow(QMainWindow):
         new_btn = QPushButton("新建对话")
         new_btn.clicked.connect(self._on_new_chat)
         toolbar.addWidget(new_btn)
+
+        commit_btn = QPushButton("提交代码")
+        commit_btn.setToolTip("提交当前目录的代码更改")
+        commit_btn.clicked.connect(self._on_commit_code)
+        toolbar.addWidget(commit_btn)
 
         layout.addLayout(toolbar)
 
@@ -716,6 +722,170 @@ class CodeTraceAIWindow(QMainWindow):
                         QMessageBox.warning(None, "失败", "切换失败")
                 except Exception as e:
                     QMessageBox.critical(None, "错误", f"切换失败: {e}")
+
+    def _on_commit_code(self):
+        """提交代码功能"""
+        try:
+            # 检查是否在 git 仓库中
+            result = subprocess.run(
+                ["git", "rev-parse", "--is-inside-work-tree"],
+                capture_output=True,
+                text=True,
+                cwd=str(self.current_work_dir)
+            )
+
+            if result.returncode != 0:
+                QMessageBox.warning(
+                    None,
+                    "不是 Git 仓库",
+                    f"当前目录不是 Git 仓库:\n{self.current_work_dir}\n\n请先初始化 Git 仓库。"
+                )
+                return
+
+            # 获取 git 状态
+            status_result = subprocess.run(
+                ["git", "status", "--short"],
+                capture_output=True,
+                text=True,
+                cwd=str(self.current_work_dir)
+            )
+
+            changed_files = status_result.stdout.strip().split('\n') if status_result.stdout.strip() else []
+
+            if not changed_files or (len(changed_files) == 1 and changed_files[0] == ''):
+                QMessageBox.information(
+                    None,
+                    "没有更改",
+                    "当前工作目录没有需要提交的更改。"
+                )
+                return
+
+            # 创建提交对话框
+            from PySide6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QCheckBox, QDialogButtonBox
+
+            dialog = QDialog()
+            dialog.setWindowTitle("提交代码")
+            dialog.setMinimumWidth(600)
+            dialog_layout = QVBoxLayout(dialog)
+
+            # 显示更改的文件
+            dialog_layout.addWidget(QLabel("待提交的文件:"))
+
+            files_text = QTextEdit()
+            files_text.setMaximumHeight(150)
+            files_text.setReadOnly(True)
+            files_text.setText('\n'.join(changed_files))
+            dialog_layout.addWidget(files_text)
+
+            # 提交消息输入
+            dialog_layout.addWidget(QLabel("提交消息:"))
+            commit_msg_edit = QTextEdit()
+            commit_msg_edit.setMaximumHeight(60)
+            commit_msg_edit.setPlaceholderText("输入提交消息，描述本次更改...")
+            dialog_layout.addWidget(commit_msg_edit)
+
+            # 推送选项
+            push_checkbox = QCheckBox("提交后推送到远程仓库")
+            dialog_layout.addWidget(push_checkbox)
+
+            # 按钮
+            buttons = QDialogButtonBox(
+                QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+            )
+            buttons.accepted.connect(dialog.accept)
+            buttons.rejected.connect(dialog.reject)
+            dialog_layout.addWidget(buttons)
+
+            if dialog.exec() != QDialog.Accepted:
+                return
+
+            commit_msg = commit_msg_edit.text().strip()
+            if not commit_msg:
+                QMessageBox.warning(None, "提示", "请输入提交消息")
+                return
+
+            # 执行 git add
+            self.chat_area.append(f"\n[系统] 正在添加文件到暂存区...")
+
+            add_result = subprocess.run(
+                ["git", "add", "."],
+                capture_output=True,
+                text=True,
+                cwd=str(self.current_work_dir)
+            )
+
+            if add_result.returncode != 0:
+                QMessageBox.critical(
+                    None,
+                    "添加文件失败",
+                    f"Git add 失败:\n{add_result.stderr}"
+                )
+                return
+
+            # 执行 git commit
+            self.chat_area.append(f"[系统] 正在提交更改...")
+
+            commit_result = subprocess.run(
+                ["git", "commit", "-m", commit_msg],
+                capture_output=True,
+                text=True,
+                cwd=str(self.current_work_dir)
+            )
+
+            if commit_result.returncode != 0:
+                QMessageBox.critical(
+                    None,
+                    "提交失败",
+                    f"Git commit 失败:\n{commit_result.stderr}"
+                )
+                return
+
+            self.chat_area.append(f"[系统] 提交成功！")
+
+            # 检查是否需要推送
+            if push_checkbox.isChecked():
+                self.chat_area.append(f"[系统] 正在推送到远程仓库...")
+
+                push_result = subprocess.run(
+                    ["git", "push"],
+                    capture_output=True,
+                    text=True,
+                    cwd=str(self.current_work_dir)
+                )
+
+                if push_result.returncode != 0:
+                    self.chat_area.append(f"[系统] 推送失败: {push_result.stderr}")
+                    QMessageBox.warning(
+                        None,
+                        "推送失败",
+                        f"已提交到本地，但推送失败:\n{push_result.stderr}"
+                    )
+                else:
+                    self.chat_area.append(f"[系统] 推送成功！")
+                    QMessageBox.information(
+                        None,
+                        "提交成功",
+                        f"代码已提交并推送到远程仓库\n提交消息: {commit_msg}"
+                    )
+            else:
+                QMessageBox.information(
+                    None,
+                    "提交成功",
+                    f"代码已提交到本地仓库\n提交消息: {commit_msg}\n\n你可以稍后手动推送。"
+                )
+
+        except FileNotFoundError:
+            QMessageBox.warning(
+                None,
+                "Git 未安装",
+                "未找到 Git 命令。\n请安装 Git 后再使用此功能。"
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                None,
+                "操作失败",
+                f"提交代码时发生错误:\n{str(e)}"
+            )
 
     def create_settings_page(self):
         """创建设置页面"""

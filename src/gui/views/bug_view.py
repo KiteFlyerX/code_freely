@@ -11,8 +11,9 @@ from qfluentwidgets import (
     PushButton, SearchLineEdit, ComboBox, PrimaryPushButton,
     BodyLabel, StrongBodyLabel, CardWidget,
     TableWidget, InfoBar, InfoBarPosition,
-    MessageBox, FluentIcon
+    FluentIcon
 )
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QTextEdit
 
 from ...services import bug_service, BugCreateInfo, BugStatus
 from ...models import BugStatus as BugStatusEnum
@@ -208,40 +209,53 @@ class BugView(QWidget):
         self._load_bugs()
 
 
-class CreateBugDialog(MessageBox):
+class CreateBugDialog(QDialog):
     """创建 Bug 对话框"""
 
     def __init__(self, parent=None):
-        super().__init__("新建 Bug", "", parent)
+        super().__init__(parent)
+        self.setWindowTitle("新建 Bug")
+        self.setMinimumWidth(400)
         self._setup_content()
 
     def _setup_content(self):
         """设置内容"""
-        from qfluentwidgets import LineEdit, TextEdit
+        from qfluentwidgets import LineEdit, TextEdit, PushButton
 
-        content_widget = QWidget()
-        layout = QVBoxLayout(content_widget)
+        layout = QVBoxLayout(self)
 
         # 标题
-        layout.addWidget(BodyLabel("标题:"))
+        layout.addWidget(QLabel("标题:"))
         self.title_edit = LineEdit()
         self.title_edit.setPlaceholderText("Bug 标题...")
         layout.addWidget(self.title_edit)
 
         # 描述
-        layout.addWidget(BodyLabel("描述:"))
+        layout.addWidget(QLabel("描述:"))
         self.description_edit = TextEdit()
         self.description_edit.setPlaceholderText("详细描述...")
         self.description_edit.setMaximumHeight(100)
         layout.addWidget(self.description_edit)
 
         # 错误类型
-        layout.addWidget(BodyLabel("错误类型:"))
+        layout.addWidget(QLabel("错误类型:"))
         self.error_type_edit = LineEdit()
         self.error_type_edit.setPlaceholderText("如: ValueError, TypeError...")
         layout.addWidget(self.error_type_edit)
 
-        self.contentLayout.addWidget(content_widget)
+        # 按钮
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        ok_btn = PushButton("创建")
+        ok_btn.clicked.connect(self.accept)
+        button_layout.addWidget(ok_btn)
+
+        cancel_btn = PushButton("取消")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+
+        layout.addLayout(button_layout)
 
     def get_bug_info(self) -> BugCreateInfo:
         """获取 Bug 信息"""

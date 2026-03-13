@@ -1,6 +1,6 @@
 """
 GUI 模块初始化
 """
-from .main_window import MainWindow
+from .main_window import MainWindow, run_gui
 
-__all__ = ["MainWindow"]
+__all__ = ["MainWindow", "run_gui"]

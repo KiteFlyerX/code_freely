@@ -11,8 +11,9 @@ from qfluentwidgets import (
     PushButton, SearchLineEdit, ComboBox, PrimaryPushButton,
     BodyLabel, StrongBodyLabel, CardWidget,
     TableWidget, InfoBar, InfoBarPosition,
-    MessageBox, SpinBox
+    SpinBox
 )
+from PySide6.QtWidgets import QDialog, QLabel, QTextEdit
 
 from ...services import review_service, ReviewCreateInfo, ReviewSubmitInfo, ReviewStatus
 
@@ -185,34 +186,47 @@ class ReviewView(QWidget):
         self._load_reviews()
 
 
-class CreateReviewDialog(MessageBox):
+class CreateReviewDialog(QDialog):
     """创建审查对话框"""
 
     def __init__(self, parent=None):
-        super().__init__("新建审查", "", parent)
+        super().__init__(parent)
+        self.setWindowTitle("新建审查")
+        self.setMinimumWidth(350)
         self._setup_content()
 
     def _setup_content(self):
         """设置内容"""
-        from qfluentwidgets import LineEdit, SpinBox
+        from qfluentwidgets import LineEdit, SpinBox, PushButton
 
-        content_widget = QWidget()
-        layout = QVBoxLayout(content_widget)
+        layout = QVBoxLayout(self)
 
         # 代码修改 ID
-        layout.addWidget(BodyLabel("代码修改 ID:"))
+        layout.addWidget(QLabel("代码修改 ID:"))
         self.code_change_spin = SpinBox()
         self.code_change_spin.setMinimum(1)
         self.code_change_spin.setMaximum(999999)
         layout.addWidget(self.code_change_spin)
 
         # 审查者
-        layout.addWidget(BodyLabel("审查者:"))
+        layout.addWidget(QLabel("审查者:"))
         self.reviewer_edit = LineEdit()
         self.reviewer_edit.setPlaceholderText("你的名字...")
         layout.addWidget(self.reviewer_edit)
 
-        self.contentLayout.addWidget(content_widget)
+        # 按钮
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        ok_btn = PushButton("创建")
+        ok_btn.clicked.connect(self.accept)
+        button_layout.addWidget(ok_btn)
+
+        cancel_btn = PushButton("取消")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+
+        layout.addLayout(button_layout)
 
     def get_review_info(self) -> ReviewCreateInfo:
         """获取审查信息"""
@@ -222,43 +236,56 @@ class CreateReviewDialog(MessageBox):
         )
 
 
-class SubmitReviewDialog(MessageBox):
+class SubmitReviewDialog(QDialog):
     """提交审查对话框"""
 
     def __init__(self, review_id: int, parent=None):
-        super().__init__("提交审查", "", parent)
+        super().__init__(parent)
+        self.setWindowTitle("提交审查")
+        self.setMinimumWidth(400)
         self.review_id = review_id
         self._setup_content()
 
     def _setup_content(self):
         """设置内容"""
-        from qfluentwidgets import TextEdit, ComboBox, SpinBox
+        from qfluentwidgets import TextEdit, ComboBox, SpinBox, PushButton
 
-        content_widget = QWidget()
-        layout = QVBoxLayout(content_widget)
+        layout = QVBoxLayout(self)
 
         # 状态
-        layout.addWidget(BodyLabel("审查结果:"))
+        layout.addWidget(QLabel("审查结果:"))
         self.status_combo = ComboBox()
         self.status_combo.addItems(["批准", "请求修改"])
         layout.addWidget(self.status_combo)
 
         # 评论
-        layout.addWidget(BodyLabel("评论:"))
+        layout.addWidget(QLabel("评论:"))
         self.comment_edit = TextEdit()
         self.comment_edit.setPlaceholderText("审查意见...")
         self.comment_edit.setMaximumHeight(100)
         layout.addWidget(self.comment_edit)
 
         # 评分
-        layout.addWidget(BodyLabel("评分 (1-5):"))
+        layout.addWidget(QLabel("评分 (1-5):"))
         self.rating_spin = SpinBox()
         self.rating_spin.setMinimum(1)
         self.rating_spin.setMaximum(5)
         self.rating_spin.setValue(5)
         layout.addWidget(self.rating_spin)
 
-        self.contentLayout.addWidget(content_widget)
+        # 按钮
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        ok_btn = PushButton("提交")
+        ok_btn.clicked.connect(self.accept)
+        button_layout.addWidget(ok_btn)
+
+        cancel_btn = PushButton("取消")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+
+        layout.addLayout(button_layout)
 
     def get_submit_info(self) -> ReviewSubmitInfo:
         """获取提交信息"""

@@ -9,9 +9,9 @@ from PySide6.QtWidgets import (
 )
 from qfluentwidgets import (
     PushButton, PrimaryPushButton, LineEdit,
-    ComboBox, Switch, BodyLabel, StrongBodyLabel,
+    ComboBox, CheckBox, BodyLabel, StrongBodyLabel,
     SubtitleLabel, CardWidget, SimpleCardWidget,
-    InfoBar, InfoBarPosition, MessageBox, FluentIcon
+    InfoBar, InfoBarPosition, FluentIcon
 )
 
 from ...services import config_service, conversation_service
@@ -152,12 +152,12 @@ class SettingsView(QWidget):
 
         # 自动提交
         grid.addWidget(BodyLabel("自动提交:"), 0, 0)
-        self.auto_commit_switch = Switch()
+        self.auto_commit_switch = CheckBox()
         grid.addWidget(self.auto_commit_switch, 0, 1)
 
         # 创建临时分支
         grid.addWidget(BodyLabel("创建临时分支:"), 1, 0)
-        self.temp_branch_switch = Switch()
+        self.temp_branch_switch = CheckBox()
         grid.addWidget(self.temp_branch_switch, 1, 1)
 
         # 主题

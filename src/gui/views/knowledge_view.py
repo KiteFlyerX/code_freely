@@ -14,6 +14,7 @@ from qfluentwidgets import (
     TableWidget, InfoBar, InfoBarPosition, ScrollArea,
     SimpleCardWidget, PillPushButton
 )
+from PySide6.QtWidgets import QDialog, QLabel
 
 from ...services import knowledge_service, KnowledgeCreateInfo
 
@@ -277,46 +278,59 @@ class KnowledgeView(QWidget):
             dialog.exec()
 
 
-class CreateEntryDialog(MessageBox):
+class CreateEntryDialog(QDialog):
     """创建条目对话框"""
 
     def __init__(self, parent=None):
-        super().__init__("新建知识条目", "", parent)
+        super().__init__(parent)
+        self.setWindowTitle("新建知识条目")
+        self.setMinimumWidth(450)
         self._setup_content()
 
     def _setup_content(self):
         """设置内容"""
-        from qfluentwidgets import LineEdit, TextEdit, ComboBox
+        from qfluentwidgets import LineEdit, TextEdit, ComboBox, PushButton
 
-        content_widget = QWidget()
-        layout = QVBoxLayout(content_widget)
+        layout = QVBoxLayout(self)
 
         # 标题
-        layout.addWidget(BodyLabel("标题:"))
+        layout.addWidget(QLabel("标题:"))
         self.title_edit = LineEdit()
         self.title_edit.setPlaceholderText("条目标题...")
         layout.addWidget(self.title_edit)
 
         # 分类
-        layout.addWidget(BodyLabel("分类:"))
+        layout.addWidget(QLabel("分类:"))
         self.category_combo = ComboBox()
         self.category_combo.addItems(knowledge_service.get_categories())
         layout.addWidget(self.category_combo)
 
         # 内容
-        layout.addWidget(BodyLabel("内容:"))
+        layout.addWidget(QLabel("内容:"))
         self.content_edit = TextEdit()
         self.content_edit.setPlaceholderText("支持 Markdown 格式...")
         self.content_edit.setMaximumHeight(150)
         layout.addWidget(self.content_edit)
 
         # 标签
-        layout.addWidget(BodyLabel("标签 (逗号分隔):"))
+        layout.addWidget(QLabel("标签 (逗号分隔):"))
         self.tags_edit = LineEdit()
         self.tags_edit.setPlaceholderText("python, 最佳实践, 示例...")
         layout.addWidget(self.tags_edit)
 
-        self.contentLayout.addWidget(content_widget)
+        # 按钮
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        ok_btn = PushButton("创建")
+        ok_btn.clicked.connect(self.accept)
+        button_layout.addWidget(ok_btn)
+
+        cancel_btn = PushButton("取消")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+
+        layout.addLayout(button_layout)
 
     def get_entry_info(self) -> KnowledgeCreateInfo:
         """获取条目信息"""
@@ -329,11 +343,13 @@ class CreateEntryDialog(MessageBox):
         )
 
 
-class EntryDetailDialog(MessageBox):
+class EntryDetailDialog(QDialog):
     """条目详情对话框"""
 
     def __init__(self, entry, parent=None):
-        super().__init__(entry.title, "", parent)
+        super().__init__(parent)
+        self.setWindowTitle(entry.title)
+        self.setMinimumWidth(500)
         self.entry = entry
         self._setup_content()
 
@@ -342,10 +358,9 @@ class EntryDetailDialog(MessageBox):
 
     def _setup_content(self):
         """设置内容"""
-        from qfluentwidgets import TextEdit
+        from qfluentwidgets import TextEdit, PushButton
 
-        content_widget = QWidget()
-        layout = QVBoxLayout(content_widget)
+        layout = QVBoxLayout(self)
 
         # 分类和标签
         info_text = f"分类: {self.entry.category or '-'}"
@@ -353,7 +368,7 @@ class EntryDetailDialog(MessageBox):
             info_text += f"  |  标签: {', '.join(self.entry.tags)}"
         info_text += f"  |  访问: {self.entry.access_count} 次"
 
-        layout.addWidget(BodyLabel(info_text))
+        layout.addWidget(QLabel(info_text))
 
         # 内容
         content_display = TextEdit()
@@ -362,4 +377,12 @@ class EntryDetailDialog(MessageBox):
         content_display.setMaximumHeight(300)
         layout.addWidget(content_display)
 
-        self.contentLayout.addWidget(content_widget)
+        # 关闭按钮
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        close_btn = PushButton("关闭")
+        close_btn.clicked.connect(self.accept)
+        button_layout.addWidget(close_btn)
+
+        layout.addLayout(button_layout)

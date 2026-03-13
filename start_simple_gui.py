@@ -349,8 +349,9 @@ class CodeTraceAIWindow(QMainWindow):
         # 添加 AI 响应开始标记
         self.chat_area.append("\n[AI]: ")
         # 保存当前位置，用于追加内容
+        from PySide6.QtGui import QTextCursor
         cursor = self.chat_area.textCursor()
-        cursor.movePosition(cursor.End)
+        cursor.movePosition(QTextCursor.End)
         self.chat_area.setTextCursor(cursor)
 
         # 使用 Python 标准库的 threading
@@ -401,8 +402,9 @@ class CodeTraceAIWindow(QMainWindow):
 
                 if status == "chunk":
                     # 实时追加内容
+                    from PySide6.QtGui import QTextCursor
                     cursor = self.chat_area.textCursor()
-                    cursor.movePosition(cursor.End)
+                    cursor.movePosition(QTextCursor.End)
                     self.chat_area.setTextCursor(cursor)
                     # 插入文本（保持滚动在底部）
                     self.chat_area.insertPlainText(data)

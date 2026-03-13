@@ -5,14 +5,13 @@ CodeTraceAI GUI 启动脚本
 import sys
 import os
 
-# 添加项目路径
+# 设置路径
 script_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_dir)
 sys.path.insert(0, script_dir)
 
-# 创建 QApplication - 必须在任何 Qt 组件之前
+# 创建 QApplication - 必须在任何 PySide6 组件导入之前
 from PySide6.QtWidgets import QApplication
-
-# 检查是否已有实例
 app = QApplication.instance()
 if app is None:
     app = QApplication(sys.argv)
@@ -25,7 +24,8 @@ app.setOrganizationName("CodeTraceAI")
 from src.database import init_database
 init_database()
 
-# 导入并创建主窗口
+# 导入 GUI 组件并创建窗口
+# 注意：不要导入 run_gui，直接导入 MainWindow
 from src.gui.main_window import MainWindow
 
 window = MainWindow()

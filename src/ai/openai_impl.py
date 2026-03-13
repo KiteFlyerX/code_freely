@@ -3,11 +3,12 @@ OpenAI AI 实现
 使用 OpenAI API 调用 GPT 模型
 """
 import asyncio
+import json
 from typing import AsyncIterator, List, Optional, Dict, Any
 from openai import AsyncOpenAI
 import httpx
 
-from .base import BaseAI, Message, MessageRole, AIResponse, AIRequestConfig
+from .base import BaseAI, Message, MessageRole, AIResponse, AIRequestConfig, ToolCall
 
 
 class OpenAI(BaseAI):
@@ -47,7 +48,7 @@ class OpenAI(BaseAI):
         # 设置默认参数
         self.default_max_tokens = kwargs.get("max_tokens", 4096)
 
-    def _convert_messages(self, messages: List[Message]) -> List[Dict[str, str]]:
+    def _convert_messages(self, messages: List[Message]) -> List[Dict[str, Any]]:
         """
         转换消息格式为 OpenAI API 格式
 
@@ -55,29 +56,55 @@ class OpenAI(BaseAI):
             messages: 内部消息格式
 
         Returns:
-            List[Dict[str, str]]: OpenAI API 消息格式
+            List[Dict[str, Any]]: OpenAI API 消息格式
         """
         result = []
         system_message = None
 
         for msg in messages:
-            role_mapping = {
-                MessageRole.SYSTEM: "system",
-                MessageRole.USER: "user",
-                MessageRole.ASSISTANT: "assistant",
-            }
-
-            # OpenAI 要求 system 消息在最前面
-            if msg.role == MessageRole.SYSTEM:
-                system_message = {
-                    "role": role_mapping[msg.role],
-                    "content": msg.content
-                }
-            else:
+            if msg.role == MessageRole.TOOL:
+                # 工具返回消息
                 result.append({
-                    "role": role_mapping[msg.role],
+                    "role": "tool",
+                    "tool_call_id": msg.tool_call_id,
                     "content": msg.content
                 })
+            elif msg.role == MessageRole.ASSISTANT and msg.tool_calls:
+                # 带工具调用的助手消息
+                tool_calls = []
+                for tool_call in msg.tool_calls:
+                    tool_calls.append({
+                        "id": tool_call.id,
+                        "type": "function",
+                        "function": {
+                            "name": tool_call.name,
+                            "arguments": json.dumps(tool_call.arguments)
+                        }
+                    })
+
+                result.append({
+                    "role": "assistant",
+                    "content": msg.content or "",
+                    "tool_calls": tool_calls
+                })
+            else:
+                role_mapping = {
+                    MessageRole.SYSTEM: "system",
+                    MessageRole.USER: "user",
+                    MessageRole.ASSISTANT: "assistant",
+                }
+
+                # OpenAI 要求 system 消息在最前面
+                if msg.role == MessageRole.SYSTEM:
+                    system_message = {
+                        "role": role_mapping[msg.role],
+                        "content": msg.content
+                    }
+                else:
+                    result.append({
+                        "role": role_mapping[msg.role],
+                        "content": msg.content
+                    })
 
         # 如果有 system 消息，放在最前面
         if system_message:
@@ -105,18 +132,37 @@ class OpenAI(BaseAI):
 
         api_messages = self._convert_messages(messages)
 
+        # 构建请求参数
+        request_params = {
+            "model": self.model,
+            "messages": api_messages,
+            "max_tokens": config.max_tokens or self.default_max_tokens,
+            "temperature": config.temperature,
+            "top_p": config.top_p,
+            "stream": False,
+        }
+
+        # 添加工具配置
+        if config.tools:
+            request_params["tools"] = config.tools
+
+        if config.extra_params:
+            request_params.update(config.extra_params)
+
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=api_messages,
-                max_tokens=config.max_tokens or self.default_max_tokens,
-                temperature=config.temperature,
-                top_p=config.top_p,
-                stream=False,
-                **config.extra_params
-            )
+            response = await self.client.chat.completions.create(**request_params)
 
             choice = response.choices[0]
+
+            # 解析工具调用
+            tool_calls = []
+            if choice.message.tool_calls:
+                for tc in choice.message.tool_calls:
+                    tool_calls.append(ToolCall(
+                        id=tc.id,
+                        name=tc.function.name,
+                        arguments=json.loads(tc.function.arguments),
+                    ))
 
             return AIResponse(
                 content=choice.message.content or "",
@@ -128,6 +174,7 @@ class OpenAI(BaseAI):
                     "total_tokens": response.usage.total_tokens,
                 },
                 raw_response=response,
+                tool_calls=tool_calls if tool_calls else None,
             )
 
         except Exception as e:

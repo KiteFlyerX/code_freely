@@ -153,14 +153,12 @@ class BaseAI(ABC):
         iterations = 0
 
         while iterations < max_iterations:
-            # 调用 AI（流式）
-            full_content = ""
-            async for chunk in self.chat_stream(current_messages, config):
-                full_content += chunk
-                yield chunk  # 实时输出
-
-            # 完整的 AI 响应（包含工具调用信息）
+            # 调用 AI（获取完整响应，包含工具调用信息）
             response = await self.chat(current_messages, config)
+
+            # 输出内容
+            if response.content:
+                yield response.content
 
             # 如果没有工具调用，直接返回
             if not response.tool_calls:

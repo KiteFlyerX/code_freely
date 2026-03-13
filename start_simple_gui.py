@@ -58,7 +58,7 @@ except Exception as e:
 
 
 def render_markdown(text):
-    """将 Markdown 文本转换为 HTML"""
+    """将 Markdown 文本转换为 HTML（不包含内联样式，使用全局样式）"""
     if not HAS_MARKDOWN:
         return text
 
@@ -74,96 +74,11 @@ def render_markdown(text):
             'toc',              # 目录
         ])
 
-        # 转换为 HTML
+        # 转换为 HTML（不添加内联样式）
         html = md.convert(text)
 
-        # 添加 CSS 样式
-        styled_html = f"""
-        <style>
-            body {{
-                font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
-                font-size: 10pt;
-                line-height: 1.6;
-                color: #333;
-            }}
-            h1, h2, h3, h4, h5, h6 {{
-                color: #1976d2;
-                margin-top: 16px;
-                margin-bottom: 8px;
-                font-weight: 600;
-            }}
-            h1 {{ font-size: 1.5em; border-bottom: 2px solid #e0e0e0; padding-bottom: 8px; }}
-            h2 {{ font-size: 1.3em; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; }}
-            h3 {{ font-size: 1.15em; }}
-            code {{
-                font-family: 'Consolas', 'Courier New', monospace;
-                background-color: #f5f5f5;
-                padding: 2px 6px;
-                border-radius: 3px;
-                font-size: 0.9em;
-            }}
-            pre {{
-                background-color: #263238;
-                color: #eceff1;
-                padding: 12px;
-                border-radius: 4px;
-                overflow-x: auto;
-                margin: 8px 0;
-            }}
-            pre code {{
-                background-color: transparent;
-                padding: 0;
-                color: inherit;
-            }}
-            blockquote {{
-                border-left: 4px solid #1976d2;
-                margin: 8px 0;
-                padding-left: 12px;
-                color: #666;
-                font-style: italic;
-            }}
-            table {{
-                border-collapse: collapse;
-                width: 100%;
-                margin: 8px 0;
-            }}
-            th, td {{
-                border: 1px solid #e0e0e0;
-                padding: 8px 12px;
-                text-align: left;
-            }}
-            th {{
-                background-color: #f5f5f5;
-                font-weight: 600;
-            }}
-            ul, ol {{
-                margin: 8px 0;
-                padding-left: 24px;
-            }}
-            li {{
-                margin: 4px 0;
-            }}
-            a {{
-                color: #1976d2;
-                text-decoration: none;
-            }}
-            a:hover {{
-                text-decoration: underline;
-            }}
-            .tool-call {{
-                color: #388e3c;
-                font-weight: 500;
-                margin: 8px 0;
-            }}
-            .system-msg {{
-                color: #757575;
-                font-style: italic;
-                margin: 4px 0;
-            }}
-        </style>
-        {html}
-        """
-        return styled_html
+        return html
+
     except Exception as e:
         print(f"Markdown render error: {e}")
         return text
@@ -184,7 +99,7 @@ def format_chat_message(content):
         elif line.startswith('[AI]'):
             lines.append(f'<p class="system-msg">{line}</p>')
         elif line.startswith('[错误]'):
-            lines.append(f'<p class="error-msg" style="color:#d32f2f;">{line}</p>')
+            lines.append(f'<p class="error-msg">{line}</p>')
         else:
             lines.append(line)
 
@@ -384,11 +299,12 @@ def setup_app_style(app, dark_mode=False):
         padding: 2px 6px;
         border-radius: 3px;
         font-size: 0.9em;
+        color: {text_color};
     }}
 
     pre {{
         background-color: {code_bg};
-        color: #eceff1;
+        color: {text_color};
         padding: 12px;
         border-radius: 4px;
         overflow-x: auto;
@@ -405,7 +321,8 @@ def setup_app_style(app, dark_mode=False):
         border-left: 4px solid {link_color};
         margin: 8px 0;
         padding-left: 12px;
-        color: #a0a0a0;
+        color: {text_color};
+        opacity: 0.8;
         font-style: italic;
     }}
 
@@ -419,6 +336,7 @@ def setup_app_style(app, dark_mode=False):
         border: 1px solid {border_color};
         padding: 8px 12px;
         text-align: left;
+        color: {text_color};
     }}
 
     th {{
@@ -436,14 +354,21 @@ def setup_app_style(app, dark_mode=False):
     }}
 
     .tool-call {{
-        color: #388e3c;
+        color: {link_color};
         font-weight: 500;
         margin: 8px 0;
     }}
 
     .system-msg {{
-        color: #a0a0a0;
+        color: {text_color};
+        opacity: 0.7;
         font-style: italic;
+        margin: 4px 0;
+    }}
+
+    .error-msg {{
+        color: #ef5350;
+        font-weight: 500;
         margin: 4px 0;
     }}
     """

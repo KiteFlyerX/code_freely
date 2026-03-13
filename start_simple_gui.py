@@ -131,6 +131,7 @@ def setup_app_style(app, dark_mode=False):
         list_bg = "#2d2d2d"
         list_hover = "#3e3e42"
         list_selected = "#1a3a5c"
+        list_selected_text = "#ffffff"
         code_bg = "#1e1e1e"
         link_color = "#4dabf7"
     else:
@@ -146,6 +147,7 @@ def setup_app_style(app, dark_mode=False):
         list_bg = "#ffffff"
         list_hover = "#f5f5f5"
         list_selected = "#e3f2fd"
+        list_selected_text = "#1976d2"
         code_bg = "#263238"
         link_color = "#1976d2"
 
@@ -176,7 +178,7 @@ def setup_app_style(app, dark_mode=False):
 
     QListWidget::item:selected {{
         background-color: {list_selected};
-        color: #ffffff;
+        color: {list_selected_text};
     }}
 
     QListWidget::item:hover {{
@@ -245,7 +247,7 @@ def setup_app_style(app, dark_mode=False):
 
     QTableWidget::item:selected {{
         background-color: {list_selected};
-        color: #ffffff;
+        color: {list_selected_text};
     }}
 
     QTableWidget::horizontalHeader {{

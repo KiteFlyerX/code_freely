@@ -65,19 +65,23 @@ class ChatWorker(QObject):
             asyncio.set_event_loop(loop)
 
             # 使用带工具调用的流式响应
-            full_response = ""
             async def stream_chat():
-                nonlocal full_response
+                full_response = ""
                 async for chunk in conversation_service.send_message_with_tools(
                     self.conversation_id, self.content, self.work_dir
                 ):
                     full_response += chunk
+                return full_response
 
-            loop.run_until_complete(stream_chat())
+            # 正确运行异步函数
+            full_response = loop.run_until_complete(stream_chat())
+            loop.run_until_complete(loop.shutdown_asyncgens())
             loop.close()
 
             self.response_received.emit(full_response)
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             self.error_occurred.emit(str(e))
         finally:
             self.finished.emit()

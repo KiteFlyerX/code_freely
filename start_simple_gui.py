@@ -322,40 +322,67 @@ class CodeTraceAIWindow(QMainWindow):
 
         # 禁用输入
         self.chat_input.setEnabled(False)
+        self.chat_area.append("[系统] 正在思考...")
 
-        # 发送消息（异步）
-        import asyncio
+        # 使用 QThread 在后台发送消息
+        from PySide6.QtCore import QThread, QObject, Signal
 
-        try:
-            # 确保有对话 ID
-            if not hasattr(self, 'chat_conversation_id') or self.chat_conversation_id is None:
-                self._on_new_chat()
+        class ChatWorker(QObject):
+            finished = Signal(str)
+            error = Signal(str)
 
-            # 运行异步发送
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            def __init__(self, conversation_id, content):
+                super().__init__()
+                self.conversation_id = conversation_id
+                self.content = content
 
-            async def send_and_get_response():
-                message = await conversation_service.send_message(
-                    self.chat_conversation_id, content
-                )
-                return message.content
+            def run(self):
+                import asyncio
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
 
-            response = loop.run_until_complete(send_and_get_response())
-            loop.close()
+                    async def send_and_get_response():
+                        message = await conversation_service.send_message(
+                            self.conversation_id, self.content
+                        )
+                        return message.content
 
-            # 显示 AI 回复
+                    response = loop.run_until_complete(send_and_get_response())
+                    loop.run_until_complete(loop.shutdown_asyncgens())
+                    loop.close()
+                    self.finished.emit(response)
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    self.error.emit(str(e))
+
+        # 创建并启动线程
+        thread = QThread()
+        worker = ChatWorker(self.chat_conversation_id, content)
+        worker.moveToThread(thread)
+
+        def on_finished(response):
             self.chat_area.append(f"\n[AI]: {response}")
+            self.chat_input.setEnabled(True)
+            self.chat_input.setFocus()
+            thread.quit()
+            thread.deleteLater()
 
-        except Exception as e:
-            error_msg = str(e)
+        def on_error(error_msg):
             if "401" in error_msg or "authentication" in error_msg.lower():
                 self.chat_area.append(f"\n[错误] API 密钥无效，请在'提供商管理'页面更新")
             else:
                 self.chat_area.append(f"\n[错误] {error_msg}")
-        finally:
             self.chat_input.setEnabled(True)
             self.chat_input.setFocus()
+            thread.quit()
+            thread.deleteLater()
+
+        thread.started.connect(worker.run)
+        worker.finished.connect(on_finished)
+        worker.error.connect(on_error)
+        thread.start()
 
     def create_history_page(self):
         """创建历史页面"""

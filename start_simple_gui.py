@@ -193,7 +193,7 @@ def format_chat_message(content):
 
 
 # 全局样式设置
-def setup_app_style(app):
+def setup_app_style(app, dark_mode=False):
     """设置应用样式"""
     # 设置默认字体
     font = QFont("Segoe UI", 10)
@@ -202,153 +202,250 @@ def setup_app_style(app):
     # 设置样式表
     app.setStyle("Fusion")
 
-    # 自定义样式
-    style_sheet = """
-    QMainWindow {
-        background-color: #f5f5f5;
-    }
+    # 根据模式选择配色
+    if dark_mode:
+        bg_color = "#1e1e1e"
+        widget_bg = "#252526"
+        text_color = "#e0e0e0"
+        input_bg = "#2d2d2d"
+        border_color = "#3e3e42"
+        button_bg = "#0d6efd"
+        button_hover = "#0b5ed7"
+        table_bg = "#2d2d2d"
+        table_header = "#3e3e42"
+        list_bg = "#2d2d2d"
+        list_hover = "#3e3e42"
+        list_selected = "#1a3a5c"
+        code_bg = "#1e1e1e"
+        link_color = "#4dabf7"
+    else:
+        bg_color = "#f5f5f5"
+        widget_bg = "#ffffff"
+        text_color = "#333333"
+        input_bg = "#ffffff"
+        border_color = "#e0e0e0"
+        button_bg = "#1976d2"
+        button_hover = "#1565c0"
+        table_bg = "#ffffff"
+        table_header = "#fafafa"
+        list_bg = "#ffffff"
+        list_hover = "#f5f5f5"
+        list_selected = "#e3f2fd"
+        code_bg = "#263238"
+        link_color = "#1976d2"
 
-    QWidget {
-        background-color: #f5f5f5;
-        color: #333333;
+    # 自定义样式
+    style_sheet = f"""
+    QMainWindow {{
+        background-color: {bg_color};
+    }}
+
+    QWidget {{
+        background-color: {bg_color};
+        color: {text_color};
         font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
         font-size: 10pt;
-    }
+    }}
 
-    QListWidget {
-        background-color: #ffffff;
-        border: 1px solid #e0e0e0;
+    QListWidget {{
+        background-color: {list_bg};
+        border: 1px solid {border_color};
         border-radius: 4px;
         padding: 4px;
-    }
+    }}
 
-    QListWidget::item {
+    QListWidget::item {{
         padding: 8px;
         border-radius: 3px;
-    }
+    }}
 
-    QListWidget::item:selected {
-        background-color: #e3f2fd;
-        color: #1976d2;
-    }
+    QListWidget::item:selected {{
+        background-color: {list_selected};
+        color: #ffffff;
+    }}
 
-    QListWidget::item:hover {
-        background-color: #f5f5f5;
-    }
+    QListWidget::item:hover {{
+        background-color: {list_hover};
+    }}
 
-    QPushButton {
-        background-color: #1976d2;
+    QPushButton {{
+        background-color: {button_bg};
         color: #ffffff;
         border: none;
         border-radius: 4px;
         padding: 8px 16px;
         font-weight: 500;
-    }
+    }}
 
-    QPushButton:hover {
-        background-color: #1565c0;
-    }
+    QPushButton:hover {{
+        background-color: {button_hover};
+    }}
 
-    QPushButton:pressed {
+    QPushButton:pressed {{
         background-color: #0d47a1;
-    }
+    }}
 
-    QPushButton:disabled {
-        background-color: #bdbdbd;
-        color: #757575;
-    }
+    QPushButton:disabled {{
+        background-color: #5a5a5a;
+        color: #a0a0a0;
+    }}
 
-    QTextEdit {
-        background-color: #ffffff;
-        border: 1px solid #e0e0e0;
+    QTextEdit {{
+        background-color: {input_bg};
+        border: 1px solid {border_color};
         border-radius: 4px;
         padding: 8px;
         font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
         font-size: 10pt;
         line-height: 1.5;
-        selection-background-color: #e3f2fd;
-    }
+        selection-background-color: {list_selected};
+        color: {text_color};
+    }}
 
-    QLineEdit {
-        background-color: #ffffff;
-        border: 1px solid #e0e0e0;
+    QLineEdit {{
+        background-color: {input_bg};
+        border: 1px solid {border_color};
         border-radius: 4px;
         padding: 6px 10px;
         font-size: 10pt;
-    }
+        color: {text_color};
+    }}
 
-    QLineEdit:focus {
-        border: 1px solid #1976d2;
-    }
+    QLineEdit:focus {{
+        border: 1px solid {button_bg};
+    }}
 
-    QTableWidget {
-        background-color: #ffffff;
-        border: 1px solid #e0e0e0;
+    QTableWidget {{
+        background-color: {table_bg};
+        border: 1px solid {border_color};
         border-radius: 4px;
-        gridline-color: #f0f0f0;
-    }
+        gridline-color: {border_color};
+        color: {text_color};
+    }}
 
-    QTableWidget::item {
+    QTableWidget::item {{
         padding: 6px;
-        border-bottom: 1px solid #f0f0f0;
-    }
+        border-bottom: 1px solid {border_color};
+    }}
 
-    QTableWidget::item:selected {
-        background-color: #e3f2fd;
-        color: #1976d2;
-    }
+    QTableWidget::item:selected {{
+        background-color: {list_selected};
+        color: #ffffff;
+    }}
 
-    QTableWidget::horizontalHeader {
-        background-color: #fafafa;
-        border-bottom: 2px solid #e0e0e0;
+    QTableWidget::horizontalHeader {{
+        background-color: {table_header};
+        border-bottom: 2px solid {border_color};
         padding: 8px;
         font-weight: 600;
-    }
+    }}
 
-    QHeaderView::section {
-        background-color: #fafafa;
+    QHeaderView::section {{
+        background-color: {table_header};
         border: none;
-        border-bottom: 2px solid #e0e0e0;
-        border-right: 1px solid #e0e0e0;
+        border-bottom: 2px solid {border_color};
+        border-right: 1px solid {border_color};
         padding: 8px;
         font-weight: 600;
-    }
+    }}
 
-    QLabel {
-        color: #424242;
+    QLabel {{
+        color: {text_color};
         font-size: 10pt;
-    }
+    }}
 
-    QStatusBar {
-        background-color: #ffffff;
-        border-top: 1px solid #e0e0e0;
-        color: #757575;
-    }
+    QStatusBar {{
+        background-color: {widget_bg};
+        border-top: 1px solid {border_color};
+        color: #a0a0a0;
+    }}
 
-    /* 特殊标签样式 */
-    .user-message {
-        color: #1976d2;
-        font-weight: 500;
-    }
+    /* Markdown 渲染样式 */
+    body {{
+        font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+        font-size: 10pt;
+        line-height: 1.6;
+        color: {text_color};
+    }}
 
-    .ai-message {
-        color: #424242;
-    }
+    h1, h2, h3, h4, h5, h6 {{
+        color: {link_color};
+        margin-top: 16px;
+        margin-bottom: 8px;
+        font-weight: 600;
+    }}
 
-    .system-message {
-        color: #757575;
+    h1 {{ font-size: 1.5em; border-bottom: 2px solid {border_color}; padding-bottom: 8px; }}
+    h2 {{ font-size: 1.3em; border-bottom: 1px solid {border_color}; padding-bottom: 4px; }}
+
+    code {{
+        font-family: 'Consolas', 'Courier New', monospace;
+        background-color: {list_hover};
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.9em;
+    }}
+
+    pre {{
+        background-color: {code_bg};
+        color: #eceff1;
+        padding: 12px;
+        border-radius: 4px;
+        overflow-x: auto;
+        margin: 8px 0;
+    }}
+
+    pre code {{
+        background-color: transparent;
+        padding: 0;
+        color: inherit;
+    }}
+
+    blockquote {{
+        border-left: 4px solid {link_color};
+        margin: 8px 0;
+        padding-left: 12px;
+        color: #a0a0a0;
         font-style: italic;
-    }
+    }}
 
-    .tool-message {
+    table {{
+        border-collapse: collapse;
+        width: 100%;
+        margin: 8px 0;
+    }}
+
+    th, td {{
+        border: 1px solid {border_color};
+        padding: 8px 12px;
+        text-align: left;
+    }}
+
+    th {{
+        background-color: {list_hover};
+        font-weight: 600;
+    }}
+
+    a {{
+        color: {link_color};
+        text-decoration: none;
+    }}
+
+    a:hover {{
+        text-decoration: underline;
+    }}
+
+    .tool-call {{
         color: #388e3c;
         font-weight: 500;
-    }
+        margin: 8px 0;
+    }}
 
-    .error-message {
-        color: #d32f2f;
-        font-weight: 500;
-    }
+    .system-msg {{
+        color: #a0a0a0;
+        font-style: italic;
+        margin: 4px 0;
+    }}
     """
     app.setStyleSheet(style_sheet)
 
@@ -369,6 +466,9 @@ class CodeTraceAIWindow(QMainWindow):
 
         # HTML 模式标志（用于 Markdown 渲染）
         self._use_html = HAS_MARKDOWN
+
+        # 深色模式标志
+        self._dark_mode = False
 
         # 创建中心部件
         central_widget = QWidget()
@@ -788,6 +888,7 @@ class CodeTraceAIWindow(QMainWindow):
                         html_content = format_chat_message(full_response)
                         self.chat_area.insertHtml(html_content)
 
+                    # 确保启用输入框
                     self.chat_input.setEnabled(True)
                     self.chat_input.setFocus()
                 elif status == "error":
@@ -1566,7 +1667,24 @@ class CodeTraceAIWindow(QMainWindow):
         config_widget = QWidget()
         config_layout = QVBoxLayout(config_widget)
 
-        # AI 配置
+        # 深色模式开关
+        theme_layout = QHBoxLayout()
+        theme_layout.addWidget(QLabel("界面主题:"))
+
+        from PySide6.QtWidgets import QCheckBox
+        self.dark_mode_checkbox = QCheckBox("深色模式")
+        self.dark_mode_checkbox.setChecked(self._dark_mode)
+        self.dark_mode_checkbox.stateChanged.connect(self._toggle_dark_mode)
+        theme_layout.addWidget(self.dark_mode_checkbox)
+        theme_layout.addStretch()
+        config_layout.addLayout(theme_layout)
+
+        # 快捷键提示
+        shortcut_hint = QLabel("快捷键: Ctrl+D 切换深色模式")
+        shortcut_hint.setStyleSheet("color: #888; font-size: 9pt;")
+        config_layout.addWidget(shortcut_hint)
+
+        config_layout.addWidget(QLabel("---"))
         config_layout.addWidget(QLabel("AI 配置"))
         try:
             cfg = config_service.get_config()
@@ -1582,6 +1700,29 @@ class CodeTraceAIWindow(QMainWindow):
 
         self.pages["设置"] = page
         self.content_stack.addWidget(page)
+
+    def _toggle_dark_mode(self, state):
+        """切换深色模式"""
+        from PySide6.QtCore import Qt
+        is_checked = (state == Qt.Checked.value)
+        if is_checked != self._dark_mode:
+            self._dark_mode = is_checked
+            # 重新应用样式
+            setup_app_style(QApplication.instance(), self._dark_mode)
+
+    def keyPressEvent(self, event):
+        """处理键盘事件"""
+        from PySide6.QtGui import QKeySequence
+        from PySide6.QtCore import Qt
+
+        # Ctrl+D 切换深色模式
+        if event.modifiers() & Qt.ControlModifier and event.key() == Qt.Key_D:
+            self._dark_mode = not self._dark_mode
+            self.dark_mode_checkbox.setChecked(self._dark_mode)
+            setup_app_style(QApplication.instance(), self._dark_mode)
+            return
+
+        super().keyPressEvent(event)
 
     def show_page(self, row):
         """显示指定页面"""
@@ -1603,10 +1744,11 @@ class CodeTraceAIWindow(QMainWindow):
 # 创建并显示窗口
 app = QApplication(sys.argv)
 
-# 设置应用样式和字体
-setup_app_style(app)
-
 window = CodeTraceAIWindow()
+
+# 设置应用样式和字体（传递深色模式参数）
+setup_app_style(app, window._dark_mode)
+
 window.show()
 
 print("CodeTraceAI GUI 已启动！")

@@ -8,6 +8,7 @@ from .base import (
     MessageRole,
     AIResponse,
     AIRequestConfig,
+    ToolCall,
 )
 from .claude import ClaudeAI, ClaudeAIFactory
 from .openai_impl import OpenAI, OpenAIFactory
@@ -20,6 +21,7 @@ __all__ = [
     "MessageRole",
     "AIResponse",
     "AIRequestConfig",
+    "ToolCall",
     # Claude 实现
     "ClaudeAI",
     "ClaudeAIFactory",

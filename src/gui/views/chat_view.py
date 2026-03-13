@@ -46,13 +46,15 @@ class MessageEdit(PlainTextEdit):
 class ChatWorker(QObject):
     """聊天工作线程"""
     response_received = Signal(str)
+    tool_call_received = Signal(str)  # 工具调用信号
     error_occurred = Signal(str)
     finished = Signal()
 
-    def __init__(self, conversation_id: int, content: str):
+    def __init__(self, conversation_id: int, content: str, work_dir=None):
         super().__init__()
         self.conversation_id = conversation_id
         self.content = content
+        self.work_dir = work_dir
 
     def run(self):
         """运行聊天任务"""
@@ -62,15 +64,14 @@ class ChatWorker(QObject):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-            # 使用流式响应
+            # 使用带工具调用的流式响应
             full_response = ""
             async def stream_chat():
                 nonlocal full_response
-                async for chunk in conversation_service.send_message_stream(
-                    self.conversation_id, self.content
+                async for chunk in conversation_service.send_message_with_tools(
+                    self.conversation_id, self.content, self.work_dir
                 ):
                     full_response += chunk
-                    # 发送进度更新（如果需要）
 
             loop.run_until_complete(stream_chat())
             loop.close()
@@ -139,6 +140,7 @@ class ChatView(QWidget):
         super().__init__(parent)
         self.conversation_id: Optional[int] = None
         self.current_project_path: Optional[str] = None
+        self.work_dir = None  # 当前工作目录
         self._is_processing = False
         self._setup_ui()
 
@@ -314,6 +316,10 @@ class ChatView(QWidget):
             )
             return False
 
+    def set_work_dir(self, work_dir):
+        """设置工作目录"""
+        self.work_dir = work_dir
+
     def _send_message(self):
         """发送消息"""
         if self._is_processing:
@@ -346,12 +352,13 @@ class ChatView(QWidget):
 
         # 创建工作线程
         self._thread = QThread()
-        self._worker = ChatWorker(self.conversation_id, content)
+        self._worker = ChatWorker(self.conversation_id, content, self.work_dir)
         self._worker.moveToThread(self._thread)
 
         # 连接信号
         self._thread.started.connect(self._worker.run)
         self._worker.response_received.connect(self._on_response_received)
+        self._worker.tool_call_received.connect(self._on_tool_call)
         self._worker.error_occurred.connect(self._on_error)
         self._worker.finished.connect(self._on_finished)
         self._worker.finished.connect(self._thread.quit)
@@ -359,6 +366,14 @@ class ChatView(QWidget):
 
         # 启动线程
         self._thread.start()
+
+    def _on_tool_call(self, tool_info: str):
+        """工具调用处理"""
+        # 显示工具调用信息
+        tool_label = BodyLabel(f"[工具调用] {tool_info}")
+        tool_label.setStyleSheet("color: #666; font-style: italic; padding: 4px 8px; background: #f0f0f0; border-radius: 4px;")
+        self.messages_layout.addWidget(tool_label)
+        self._scroll_to_bottom()
 
     def _on_response_received(self, response: str):
         """响应接收处理"""

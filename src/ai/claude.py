@@ -1,19 +1,21 @@
 """
 Claude AI 实现
-使用 Anthropic API 调用 Claude 模型
+使用 Anthropic API 调用 Claude 模型，支持工具调用
 """
 import asyncio
+import json
+import uuid
 from typing import AsyncIterator, List, Optional, Dict, Any
 import anthropic
 from anthropic import Anthropic, AsyncAnthropic
 
-from .base import BaseAI, Message, MessageRole, AIResponse, AIRequestConfig
+from .base import BaseAI, Message, MessageRole, AIResponse, AIRequestConfig, ToolCall
 
 
 class ClaudeAI(BaseAI):
     """
     Claude AI 实现
-    支持 Claude 3 Opus, Sonnet, Haiku 等模型
+    支持 Claude 3 Opus, Sonnet, Haiku 等模型和工具调用
     """
 
     # 支持的模型列表
@@ -44,7 +46,7 @@ class ClaudeAI(BaseAI):
         # 设置默认参数
         self.default_max_tokens = kwargs.get("max_tokens", 4096)
 
-    def _convert_messages(self, messages: List[Message]) -> List[Dict[str, str]]:
+    def _convert_messages(self, messages: List[Message]) -> List[Dict[str, Any]]:
         """
         转换消息格式为 Claude API 格式
 
@@ -52,19 +54,55 @@ class ClaudeAI(BaseAI):
             messages: 内部消息格式
 
         Returns:
-            List[Dict[str, str]]: Claude API 消息格式
+            List[Dict[str, Any]]: Claude API 消息格式
         """
         result = []
         for msg in messages:
-            role_mapping = {
-                MessageRole.SYSTEM: "system",
-                MessageRole.USER: "user",
-                MessageRole.ASSISTANT: "assistant",
-            }
-            result.append({
-                "role": role_mapping[msg.role],
-                "content": msg.content
-            })
+            if msg.role == MessageRole.TOOL:
+                # 工具返回消息
+                result.append({
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": msg.tool_call_id,
+                            "content": msg.content
+                        }
+                    ]
+                })
+            elif msg.role == MessageRole.ASSISTANT and msg.tool_calls:
+                # 带工具调用的助手消息
+                content = []
+                for tool_call in msg.tool_calls:
+                    content.append({
+                        "type": "tool_use",
+                        "id": tool_call.id,
+                        "name": tool_call.name,
+                        "input": tool_call.arguments
+                    })
+
+                # 如果还有文本内容，添加到 content
+                if msg.content:
+                    content.append({
+                        "type": "text",
+                        "text": msg.content
+                    })
+
+                result.append({
+                    "role": "assistant",
+                    "content": content
+                })
+            else:
+                # 普通消息
+                role_mapping = {
+                    MessageRole.SYSTEM: "user",  # Claude 用 user 消息包含系统指令
+                    MessageRole.USER: "user",
+                    MessageRole.ASSISTANT: "assistant",
+                }
+                result.append({
+                    "role": role_mapping[msg.role],
+                    "content": msg.content
+                })
         return result
 
     async def chat(
@@ -87,26 +125,50 @@ class ClaudeAI(BaseAI):
 
         api_messages = self._convert_messages(messages)
 
+        # 构建请求参数
+        request_params = {
+            "model": self.model,
+            "messages": api_messages,
+            "max_tokens": config.max_tokens or self.default_max_tokens,
+            "temperature": config.temperature,
+            "top_p": config.top_p,
+            "stream": False,
+        }
+
+        # 添加工具配置
+        if config.tools:
+            request_params["tools"] = config.tools
+
+        if config.extra_params:
+            request_params.update(config.extra_params)
+
         try:
-            response = await self.async_client.messages.create(
-                model=self.model,
-                messages=api_messages,
-                max_tokens=config.max_tokens or self.default_max_tokens,
-                temperature=config.temperature,
-                top_p=config.top_p,
-                stream=False,
-                **config.extra_params
-            )
+            response = await self.async_client.messages.create(**request_params)
+
+            # 解析响应
+            content = ""
+            tool_calls = []
+
+            for block in response.content:
+                if block.type == "text":
+                    content += block.text
+                elif block.type == "tool_use":
+                    tool_calls.append(ToolCall(
+                        id=block.id,
+                        name=block.name,
+                        arguments=block.input,
+                    ))
 
             return AIResponse(
-                content=response.content[0].text,
+                content=content,
                 model=response.model,
                 finish_reason=response.stop_reason,
                 usage={
                     "input_tokens": response.usage.input_tokens,
                     "output_tokens": response.usage.output_tokens,
                 },
-                raw_response=response
+                raw_response=response,
+                tool_calls=tool_calls if tool_calls else None,
             )
 
         except anthropic.APIError as e:
@@ -135,20 +197,29 @@ class ClaudeAI(BaseAI):
 
         api_messages = self._convert_messages(messages)
 
+        # 构建请求参数
+        request_params = {
+            "model": self.model,
+            "messages": api_messages,
+            "max_tokens": config.max_tokens or self.default_max_tokens,
+            "temperature": config.temperature,
+            "top_p": config.top_p,
+            "stream": True,
+        }
+
+        if config.tools:
+            request_params["tools"] = config.tools
+
+        if config.extra_params:
+            request_params.update(config.extra_params)
+
         try:
-            stream = await self.async_client.messages.create(
-                model=self.model,
-                messages=api_messages,
-                max_tokens=config.max_tokens or self.default_max_tokens,
-                temperature=config.temperature,
-                top_p=config.top_p,
-                stream=True,
-                **config.extra_params
-            )
+            stream = await self.async_client.messages.create(**request_params)
 
             async for event in stream:
-                if hasattr(event, 'delta') and hasattr(event.delta, 'text'):
-                    yield event.delta.text
+                if event.type == "content_block_delta":
+                    if hasattr(event.delta, 'text'):
+                        yield event.delta.text
 
         except anthropic.APIError as e:
             raise RuntimeError(f"Claude API 错误: {e}") from e

@@ -468,7 +468,7 @@ class CodeTraceAIWindow(QMainWindow):
         self._use_html = HAS_MARKDOWN
 
         # 深色模式标志
-        self._dark_mode = False
+        self._dark_mode = True
 
         # 创建中心部件
         central_widget = QWidget()

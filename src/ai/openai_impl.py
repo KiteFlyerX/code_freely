@@ -4,7 +4,7 @@ OpenAI AI 实现
 """
 import asyncio
 from typing import AsyncIterator, List, Optional, Dict, Any
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, httpx
 
 from .base import BaseAI, Message, MessageRole, AIResponse, AIRequestConfig
 
@@ -24,11 +24,24 @@ class OpenAI(BaseAI):
         "gpt-3.5-turbo": "gpt-3.5-turbo",
     }
 
-    def __init__(self, api_key: str, model: str = "gpt-4o", **kwargs):
+    def __init__(self, api_key: str, model: str = "gpt-4o", base_url: str = None, **kwargs):
         super().__init__(api_key, model, **kwargs)
 
+        # 设置超时时间（默认 5 分钟）
+        timeout = kwargs.get("timeout", 300)
+
         # 初始化异步客户端
-        self.client = AsyncOpenAI(api_key=api_key)
+        if base_url:
+            self.client = AsyncOpenAI(
+                api_key=api_key,
+                base_url=base_url,
+                timeout=httpx.Timeout(timeout=timeout, connect=60)
+            )
+        else:
+            self.client = AsyncOpenAI(
+                api_key=api_key,
+                timeout=httpx.Timeout(timeout=timeout, connect=60)
+            )
 
         # 设置默认参数
         self.default_max_tokens = kwargs.get("max_tokens", 4096)

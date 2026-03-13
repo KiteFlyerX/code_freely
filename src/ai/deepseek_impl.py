@@ -5,6 +5,7 @@ DeepSeek AI 实现
 import asyncio
 from typing import AsyncIterator, List, Optional, Dict, Any
 from openai import AsyncOpenAI
+import httpx
 
 from .base import BaseAI, Message, MessageRole, AIResponse, AIRequestConfig
 
@@ -28,10 +29,14 @@ class DeepSeekAI(BaseAI):
     def __init__(self, api_key: str, model: str = "deepseek-chat", **kwargs):
         super().__init__(api_key, model, **kwargs)
 
+        # 设置超时时间（默认 5 分钟）
+        timeout = kwargs.get("timeout", 300)
+
         # 初始化异步客户端（使用 DeepSeek 的 API 端点）
         self.client = AsyncOpenAI(
             api_key=api_key,
-            base_url=self.API_BASE
+            base_url=self.API_BASE,
+            timeout=httpx.Timeout(timeout=timeout, connect=60)
         )
 
         # 设置默认参数

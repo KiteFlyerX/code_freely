@@ -57,18 +57,16 @@ class ConversationService:
         """
         # 切换到工作目录执行工具
         import os
-        old_cwd = None
-        if self._current_work_dir:
-            old_cwd = os.getcwd()
-            os.chdir(str(self._current_work_dir))
+        old_cwd = os.getcwd()
+        target_dir = str(self._current_work_dir) if self._current_work_dir else old_cwd
 
         try:
+            os.chdir(target_dir)
             result = tool_registry.execute(tool_name, **arguments)
             return result.to_dict()
         finally:
             # 恢复原工作目录
-            if old_cwd:
-                os.chdir(old_cwd)
+            os.chdir(old_cwd)
 
     def create_conversation(
         self, title: str, project_path: Optional[str] = None
@@ -208,6 +206,9 @@ class ConversationService:
         # 设置工作目录
         if work_dir:
             self.set_work_dir(work_dir)
+        elif not self._current_work_dir:
+            # 如果没有设置工作目录，使用当前目录
+            self.set_work_dir(Path.cwd())
 
         # 保存用户消息
         self._message_repo.create(

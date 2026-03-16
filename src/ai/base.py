@@ -254,6 +254,18 @@ class BaseAI(ABC):
                                 commit_msg = data.get('commit_msg', '')
                                 if commit_msg:
                                     yield f"✓ 已自动提交: {commit_msg}"
+
+                                    # 显示推送状态
+                                    if data.get('auto_pushed'):
+                                        if data.get('push_success'):
+                                            yield f"✓ 已推送到远程仓库"
+                                        elif 'push_error' in data:
+                                            push_error = data['push_error']
+                                            if len(push_error) > 50:
+                                                push_error = push_error[:50] + "..."
+                                            yield f"⚠ 推送失败: {push_error}"
+                                    elif data.get('push_skipped_reason') == 'no_remote':
+                                        yield f"ℹ 未配置远程仓库，跳过推送"
                                 else:
                                     yield f"✓ 已写入并自动提交"
                             else:

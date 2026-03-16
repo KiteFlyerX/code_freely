@@ -36,14 +36,8 @@ try:
     from src.database import init_database
     from src.services import (
         config_service, conversation_service,
-        provider_manager, ProviderConfig, ProviderType
+        provider_manager
     )
-    # 尝试导入 PROVIDER_PRESETS，如果失败则使用空列表
-    try:
-        from src.services import PROVIDER_PRESETS
-    except ImportError:
-        PROVIDER_PRESETS = []
-        print("Warning: PROVIDER_PRESETS not available")
     from src.services.bug_service import bug_service, BugCreateInfo
     from src.services.knowledge_service import knowledge_service, KnowledgeCreateInfo
     init_database()
@@ -51,7 +45,6 @@ try:
 except Exception as e:
     print(f"Warning: Some services failed to load: {e}")
     # 设置默认值避免程序崩溃
-    PROVIDER_PRESETS = []
     provider_manager = None
     config_service = None
     conversation_service = None
@@ -1008,185 +1001,6 @@ class CodeTraceAIWindow(QMainWindow):
         self.pages["知识库"] = page
         self.content_stack.addWidget(page)
 
-    def _on_edit_provider(self):
-        """编辑提供商"""
-        from PySide6.QtWidgets import QInputDialog, QMessageBox
-
-        try:
-            providers = provider_manager.get_providers()
-            if not providers:
-                QMessageBox.warning(None, "提示", "没有可用的提供商")
-                return
-
-            # 创建提供商选择列表
-            provider_names = [f"{p.name} ({p.id})" for p in providers]
-            provider_map = {name: p for name, p in zip(provider_names, providers)}
-
-            # 使用输入对话框让用户选择
-            from PySide6.QtWidgets import QInputDialog
-            ok, selected = QInputDialog.getItem(
-                None,
-                "选择提供商",
-                "请选择要编辑的提供商:",
-                provider_names,
-                0,
-                False
-            )
-
-            if not ok or not selected:
-                return
-
-            provider = provider_map[selected]
-
-            # 创建编辑对话框
-            from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QDialogButtonBox, QFormLayout
-
-            dialog = QDialog()
-            dialog.setWindowTitle(f"编辑提供商: {provider.name}")
-            dialog.setMinimumWidth(400)
-            dialog_layout = QVBoxLayout(dialog)
-
-            # 使用表单布局使界面更整洁
-            form_layout = QFormLayout()
-
-            # 名称
-            name_edit = QLineEdit(provider.name)
-            form_layout.addRow("名称:", name_edit)
-
-            # API 端点
-            endpoint_edit = QLineEdit(provider.api_endpoint or "")
-            endpoint_edit.setPlaceholderText("https://api.example.com (可选)")
-            form_layout.addRow("API 端点:", endpoint_edit)
-
-            # 模型
-            model_edit = QLineEdit(provider.model)
-            form_layout.addRow("模型:", model_edit)
-
-            # API 密钥
-            api_key_edit = QLineEdit(provider.api_key or "")
-            api_key_edit.setEchoMode(QLineEdit.Password)
-            form_layout.addRow("API 密钥:", api_key_edit)
-
-            # 添加说明
-            endpoint_hint = QLabel("💡 提示: API 端点用于中转服务或自定义 API 地址")
-            endpoint_hint.setStyleSheet("color: #888; font-size: 10px;")
-            dialog_layout.addWidget(endpoint_hint)
-
-            dialog_layout.addLayout(form_layout)
-
-            # 按钮
-            buttons = QDialogButtonBox(
-                QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-            )
-            buttons.accepted.connect(dialog.accept)
-            buttons.rejected.connect(dialog.reject)
-            dialog_layout.addWidget(buttons)
-
-            if dialog.exec() == QDialog.Accepted:
-                # 更新配置
-                from src.services.provider_service import ProviderConfig
-                updated_config = ProviderConfig(
-                    id=provider.id,
-                    name=name_edit.text(),
-                    provider_type=provider.provider_type,
-                    api_key=api_key_edit.text(),
-                    api_endpoint=endpoint_edit.text() or provider.api_endpoint,  # 允许为空
-                    model=model_edit.text(),
-                    temperature=provider.temperature,
-                    max_tokens=provider.max_tokens,
-                    top_p=provider.top_p,
-                    proxy_url=provider.proxy_url,
-                    proxy_enabled=provider.proxy_enabled,
-                    is_enabled=provider.is_enabled,
-                    custom_params=provider.custom_params,
-                )
-
-                if provider_manager.update_provider(provider.id, updated_config):
-                    QMessageBox.information(
-                        None,
-                        "成功",
-                        f"已更新提供商:\n"
-                        f"名称: {updated_config.name}\n"
-                        f"端点: {updated_config.api_endpoint or '(默认)'}\n"
-                        f"模型: {updated_config.model}"
-                    )
-                else:
-                    QMessageBox.warning(None, "失败", "更新提供商失败")
-        except Exception as e:
-            QMessageBox.critical(None, "错误", f"编辑提供商失败: {e}")
-
-    def _on_import_provider(self):
-        """导入提供商（简化版本）"""
-        from PySide6.QtWidgets import QInputDialog, QMessageBox
-
-        # 显示预设选择对话框
-        presets = [f"{p.name} ({p.id})" for p in PROVIDER_PRESETS]
-
-        result = QInputDialog.getItem(
-            None, "选择预设", "选择一个预设配置:", presets, 0, False
-        )
-
-        # result 是一个元组 (ok, selection)
-        if result and len(result) == 2:
-            ok, selection = result
-            if ok and selection and isinstance(selection, str):
-                # 解析预设 ID
-                try:
-                    preset_id = selection.split("(")[1].split(")")[0]
-                except IndexError:
-                    QMessageBox.warning(None, "错误", "无法解析预设 ID")
-                    return
-
-                # 获取 API Key
-                api_key_result = QInputDialog.getText(
-                    None, "输入 API Key", "请输入 API 密钥:", QLineEdit.Password
-                )
-
-                if api_key_result and len(api_key_result) == 2:
-                    ok, api_key = api_key_result
-                    if ok and api_key:
-                        try:
-                            config = provider_manager.import_from_preset(preset_id, api_key)
-                            if config and provider_manager.add_provider(config):
-                                QMessageBox.information(None, "成功", f"已添加提供商: {config.name}")
-                            else:
-                                QMessageBox.warning(None, "失败", "添加提供商失败")
-                        except Exception as e:
-                            QMessageBox.critical(None, "错误", f"导入失败: {e}")
-
-    def _on_switch_provider(self):
-        """切换提供商（简化版本）"""
-        from PySide6.QtWidgets import QInputDialog, QMessageBox
-
-        providers = provider_manager.get_providers()
-        if not providers:
-            QMessageBox.warning(None, "提示", "没有配置任何提供商")
-            return
-
-        provider_names = [f"{p.name} ({p.id})" for p in providers]
-
-        result = QInputDialog.getItem(
-            None, "切换提供商", "选择要切换到的提供商:", provider_names, 0, False
-        )
-
-        # result 是一个元组 (ok, selection)
-        if result and len(result) == 2:
-            ok, selection = result
-            if ok and selection and isinstance(selection, str):
-                try:
-                    provider_id = selection.split("(")[1].split(")")[0]
-                except IndexError:
-                    QMessageBox.warning(None, "错误", "无法解析提供商 ID")
-                    return
-
-                try:
-                    if provider_manager.switch_provider(provider_id):
-                        QMessageBox.information(None, "成功", f"已切换到: {selection}")
-                    else:
-                        QMessageBox.warning(None, "失败", "切换失败")
-                except Exception as e:
-                    QMessageBox.critical(None, "错误", f"切换失败: {e}")
-
     def _on_commit_code(self):
         """提交代码功能 - 支持 Git 和 SVN"""
         try:
@@ -1618,6 +1432,10 @@ class CodeTraceAIWindow(QMainWindow):
         config_layout.addWidget(QLabel("---"))
         config_layout.addWidget(QLabel("AI 配置"))
 
+        # CC-Switch 状态显示
+        self.ccswitch_status_label = QLabel("正在检测 cc-switch...")
+        config_layout.addWidget(self.ccswitch_status_label)
+
         # 当前配置显示
         try:
             cfg = config_service.get_config()
@@ -1627,19 +1445,8 @@ class CodeTraceAIWindow(QMainWindow):
         except:
             config_layout.addWidget(QLabel("无法加载配置"))
 
-        # 操作按钮
-        button_layout = QHBoxLayout()
-        add_provider_btn = QPushButton("添加提供商")
-        add_provider_btn.clicked.connect(self._add_provider)
-        button_layout.addWidget(add_provider_btn)
-        edit_provider_btn = QPushButton("编辑提供商")
-        edit_provider_btn.clicked.connect(self._edit_provider)
-        button_layout.addWidget(edit_provider_btn)
-        switch_provider_btn = QPushButton("切换提供商")
-        switch_provider_btn.clicked.connect(self._switch_provider)
-        button_layout.addWidget(switch_provider_btn)
-        button_layout.addStretch()
-        config_layout.addLayout(button_layout)
+        # 刷新 CC-Switch 状态
+        self._refresh_ccswitch_status()
 
         config_layout.addStretch()
         layout.addWidget(config_widget)
@@ -1671,17 +1478,25 @@ class CodeTraceAIWindow(QMainWindow):
                 self.toolbar_auto_commit_checkbox.setChecked(is_checked)
                 self.toolbar_auto_commit_checkbox.blockSignals(False)
 
-    def _add_provider(self):
-        """添加提供商（从设置页面调用）"""
-        self._on_import_provider()
+    def _refresh_ccswitch_status(self):
+        """刷新 cc-switch 状态显示"""
+        if provider_manager is None:
+            self.ccswitch_status_label.setText("❌ 服务未初始化")
+            self.ccswitch_status_label.setStyleSheet("color: red;")
+            return
 
-    def _edit_provider(self):
-        """编辑提供商（从设置页面调用）"""
-        self._on_edit_provider()
-
-    def _switch_provider(self):
-        """切换提供商（从设置页面调用）"""
-        self._on_switch_provider()
+        try:
+            provider = provider_manager.get_ccswitch_active_provider()
+            if provider:
+                status_text = f"✅ CC-Switch: {provider.name} ({provider.model})"
+                self.ccswitch_status_label.setText(status_text)
+                self.ccswitch_status_label.setStyleSheet("color: green;")
+            else:
+                self.ccswitch_status_label.setText("⚠️ 未检测到 cc-switch 配置")
+                self.ccswitch_status_label.setStyleSheet("color: orange;")
+        except Exception as e:
+            self.ccswitch_status_label.setText(f"❌ 检测失败: {str(e)}")
+            self.ccswitch_status_label.setStyleSheet("color: red;")
 
     def keyPressEvent(self, event):
         """处理键盘事件"""

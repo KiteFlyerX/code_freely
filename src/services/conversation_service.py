@@ -167,6 +167,51 @@ class ConversationService:
                                         result_dict['data']['auto_committed'] = True
                                         result_dict['data']['commit_id'] = commit_id
                                         result_dict['data']['commit_msg'] = commit_msg
+
+                                        # 推送到远程仓库
+                                        try:
+                                            # 检查是否有远程仓库
+                                            remote_result = subprocess.run(
+                                                ['git', 'remote'],
+                                                capture_output=True,
+                                                encoding='utf-8',
+                                                errors='replace',
+                                                text=True,
+                                                cwd=target_dir
+                                            )
+
+                                            if remote_result.returncode == 0 and remote_result.stdout.strip():
+                                                # 有远程仓库，执行推送
+                                                push_result = subprocess.run(
+                                                    ['git', 'push'],
+                                                    capture_output=True,
+                                                    encoding='utf-8',
+                                                    errors='replace',
+                                                    text=True,
+                                                    cwd=target_dir,
+                                                    timeout=60  # 60秒超时
+                                                )
+
+                                                if push_result.returncode == 0:
+                                                    result_dict['data']['auto_pushed'] = True
+                                                    result_dict['data']['push_success'] = True
+                                                else:
+                                                    # 推送失败，但不影响提交结果
+                                                    result_dict['data']['auto_pushed'] = True
+                                                    result_dict['data']['push_success'] = False
+                                                    result_dict['data']['push_error'] = push_result.stderr or "推送失败"
+                                            else:
+                                                # 没有远程仓库
+                                                result_dict['data']['auto_pushed'] = False
+                                                result_dict['data']['push_skipped_reason'] = "no_remote"
+                                        except subprocess.TimeoutExpired:
+                                            result_dict['data']['auto_pushed'] = True
+                                            result_dict['data']['push_success'] = False
+                                            result_dict['data']['push_error'] = "推送超时"
+                                        except Exception as push_error:
+                                            result_dict['data']['auto_pushed'] = True
+                                            result_dict['data']['push_success'] = False
+                                            result_dict['data']['push_error'] = str(push_error)
                             except Exception as e:
                                 print(f"自动提交失败: {e}")
                 except Exception as e:

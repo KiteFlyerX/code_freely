@@ -1,0 +1,592 @@
+"""
+CodeTraceAI GUI - 使用 PyQt-Fluent-Widgets 美化版本
+使用 FluentWindow 和 qfluentwidgets 组件
+"""
+import sys
+import os
+import subprocess
+from pathlib import Path
+
+# 设置路径
+script_dir = Path(__file__).parent.absolute()
+os.chdir(script_dir)
+sys.path.insert(0, str(script_dir))
+
+# qfluentwidgets 导入
+from qfluentwidgets import (
+    FluentWindow, NavigationItemPosition, FluentIcon,
+    setTheme, Theme, InfoBar, InfoBarPosition,
+    PushButton, PrimaryPushButton, BodyLabel, SubtitleLabel, StrongBodyLabel,
+    SimpleCardWidget, CardWidget, ScrollArea, TextEdit, LineEdit,
+    ComboBox, CheckBox, SwitchButton, ProgressBar,
+    TableWidget, ListWidget, MessageBox,
+    qconfig, QConfig, OptionsConfigItem, ConfigSerializer, BoolValidator,
+    InfoBarIcon, Icon, PlainTextEdit
+)
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QStackedWidget, QApplication, QFileDialog, QHeaderView
+)
+from PySide6.QtGui import QFont, QTextCursor
+
+# 尝试导入 markdown 库
+try:
+    import markdown
+    HAS_MARKDOWN = True
+except ImportError:
+    HAS_MARKDOWN = False
+    print("Warning: markdown not installed. Run: pip install markdown")
+
+# 导入服务模块
+try:
+    from src.database import init_database
+    from src.services import (
+        config_service, conversation_service,
+        provider_manager
+    )
+    from src.services.bug_service import bug_service, BugCreateInfo
+    from src.services.knowledge_service import knowledge_service, KnowledgeCreateInfo
+    from src.tools import tool_registry
+    init_database()
+
+    # 验证工具
+    tools = tool_registry.list_tools()
+    print(f"Services loaded. Tools: {[t.name for t in tools]}")
+
+    if len(tools) == 0:
+        print("Registering default tools...")
+        from src.tools.default_tools import register_default_tools
+        register_default_tools()
+        tools = tool_registry.list_tools()
+
+except Exception as e:
+    print(f"Service load error: {e}")
+    import traceback
+    traceback.print_exc()
+    provider_manager = None
+    config_service = None
+    conversation_service = None
+
+
+def render_markdown(text):
+    """渲染 Markdown"""
+    if not HAS_MARKDOWN:
+        return text
+    try:
+        md = markdown.Markdown(extensions=[
+            'fenced_code', 'codehilite', 'tables', 'nl2br', 'sane_lists', 'toc',
+        ])
+        return md.convert(text)
+    except Exception as e:
+        print(f"Markdown error: {e}")
+        return text
+
+
+def format_chat_message(content):
+    """格式化聊天消息"""
+    if not HAS_MARKDOWN:
+        return content
+    return render_markdown(content)
+
+
+class ChatWidget(QWidget):
+    """聊天页面"""
+
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("chatWidget")
+        self.chat_conversation_id = None
+        self._is_processing = False
+        self._setup_ui()
+
+    def _setup_ui(self):
+        """设置界面"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
+
+        # 顶部工具栏卡片
+        toolbar_card = SimpleCardWidget()
+        toolbar_layout = QHBoxLayout(toolbar_card)
+        toolbar_layout.setContentsMargins(16, 12, 16, 12)
+
+        # 提供商状态
+        toolbar_layout.addWidget(StrongBodyLabel("AI 对话"))
+        toolbar_layout.addWidget(BodyLabel("|"))
+        self.chat_status_label = BodyLabel("未配置提供商")
+        self.chat_status_label.setStyleSheet("color: orange;")
+        toolbar_layout.addWidget(self.chat_status_label)
+
+        # Token 统计
+        toolbar_layout.addWidget(BodyLabel("|"))
+        self.token_stats_label = BodyLabel("Tokens: -")
+        self.token_stats_label.setStyleSheet("color: #888; font-size: 11px;")
+        self.token_stats_label.setToolTip("Token 使用统计")
+        toolbar_layout.addWidget(self.token_stats_label)
+
+        toolbar_layout.addStretch()
+
+        # 新建对话按钮
+        new_chat_btn = PrimaryPushButton("新建对话")
+        new_chat_btn.clicked.connect(self._on_new_chat)
+        toolbar_layout.addWidget(new_chat_btn)
+
+        layout.addWidget(toolbar_card)
+
+        # 聊天区域（使用卡片）
+        chat_card = SimpleCardWidget()
+        chat_layout = QVBoxLayout(chat_card)
+        chat_layout.setContentsMargins(16, 16, 16, 16)
+
+        # 消息显示区
+        self.chat_area = TextEdit()
+        self.chat_area.setReadOnly(True)
+        self.chat_area.setMinimumHeight(400)
+        chat_layout.addWidget(self.chat_area)
+
+        layout.addWidget(chat_card, 1)
+
+        # 输入区域卡片
+        input_card = SimpleCardWidget()
+        input_layout = QVBoxLayout(input_card)
+        input_layout.setContentsMargins(16, 16, 16, 16)
+
+        # 自动提交选项
+        options_layout = QHBoxLayout()
+        self.auto_commit_checkbox = CheckBox("自动提交代码")
+        self.auto_commit_checkbox.setChecked(False)
+        self.auto_commit_checkbox.setToolTip("应用代码修改时自动提交到 Git")
+        options_layout.addWidget(self.auto_commit_checkbox)
+        options_layout.addStretch()
+        input_layout.addLayout(options_layout)
+
+        # 输入框
+        self.chat_input = PlainTextEdit()
+        self.chat_input.setPlaceholderText("输入你的问题... (Ctrl+Enter 发送)")
+        self.chat_input.setMaximumHeight(120)
+        input_layout.addWidget(self.chat_input)
+
+        # 发送按钮
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        self.send_btn = PrimaryPushButton("发送")
+        self.send_btn.clicked.connect(self._on_send)
+        button_layout.addWidget(self.send_btn)
+
+        input_layout.addLayout(button_layout)
+        layout.addWidget(input_card)
+
+        # 初始化状态
+        self._check_provider()
+
+    def _check_provider(self):
+        """检查提供商配置"""
+        try:
+            provider = provider_manager.get_ccswitch_active_provider()
+            is_from_ccswitch = True
+
+            if not provider:
+                provider = provider_manager.get_active_provider()
+                is_from_ccswitch = False
+
+            if provider:
+                has_valid_key = bool(provider.api_key and not provider.api_key.startswith("test"))
+                if has_valid_key:
+                    ccswitch_tag = " [CC]" if is_from_ccswitch else ""
+                    self.chat_status_label.setText(f"活动: {provider.name} ({provider.model}){ccswitch_tag}")
+                    self.chat_status_label.setStyleSheet("color: green;")
+                else:
+                    self.chat_status_label.setText("API 密钥无效")
+                    self.chat_status_label.setStyleSheet("color: orange;")
+            else:
+                self.chat_status_label.setText("未配置 (使用 CC-Switch)")
+                self.chat_status_label.setStyleSheet("color: orange;")
+        except Exception as e:
+            self.chat_status_label.setText(f"配置错误: {e}")
+            self.chat_status_label.setStyleSheet("color: red;")
+
+    def _on_new_chat(self):
+        """新建对话"""
+        try:
+            self.chat_conversation_id = conversation_service.create_conversation(
+                title="新对话",
+                project_path=None,
+            )
+            self.chat_area.clear()
+            self.chat_area.append(f"--- 新对话 (ID: {self.chat_conversation_id}) ---")
+            self.chat_area.append("\n欢迎使用 CodeTraceAI！\n")
+            self.chat_area.append("配置提示: 请使用 CC-Switch 配置 AI 提供商\n")
+            InfoBar.success(
+                title="新对话已创建",
+                content=f"对话 ID: {self.chat_conversation_id}",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self
+            )
+            self._update_token_stats()
+        except Exception as e:
+            InfoBar.error(
+                title="创建失败",
+                content=str(e),
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self
+            )
+
+    def _on_send(self):
+        """发送消息"""
+        if self._is_processing:
+            return
+
+        content = self.chat_input.toPlainText().strip()
+        if not content:
+            return
+
+        # 显示用户消息
+        self.chat_area.append(f"\n[用户]: {content}")
+        self.chat_input.clear()
+
+        # 禁用输入
+        self._set_processing(True)
+
+        # 使用线程处理
+        import queue
+        import threading
+        result_queue = queue.Queue()
+
+        def run_chat():
+            try:
+                if self.chat_conversation_id is None:
+                    self.chat_conversation_id = conversation_service.create_conversation("新对话")
+
+                full_response = ""
+                for chunk in conversation_service.send_message_with_tools_stream(
+                    self.chat_conversation_id, content, Path.cwd()
+                ):
+                    full_response += chunk
+
+                result_queue.put({"status": "success", "content": full_response})
+            except Exception as e:
+                result_queue.put({"status": "error", "data": str(e)})
+            finally:
+                result_queue.put({"status": "done"})
+
+        threading.Thread(target=run_chat, daemon=True).start()
+
+        # 轮询结果
+        from PySide6.QtCore import QTimer
+        buffer = []
+
+        def check_result():
+            try:
+                while True:
+                    result = result_queue.get_nowait()
+                    if result.get("status") == "done":
+                        self._set_processing(False)
+                        self.chat_input.setFocus()
+                        self._update_token_stats()
+                        return
+                    elif result.get("status") == "success":
+                        content = result.get("content", "")
+                        buffer.append(content)
+                        self.chat_area.append(f"\n[AI]: {content}")
+                    elif result.get("status") == "error":
+                        self.chat_area.append(f"\n[错误] {result.get('data', '')}")
+            except queue.Empty:
+                QTimer.singleShot(10, check_result)
+
+        QTimer.singleShot(10, check_result)
+
+    def _set_processing(self, processing):
+        """设置处理状态"""
+        self._is_processing = processing
+        self.send_btn.setEnabled(not processing)
+        self.chat_input.setEnabled(not processing)
+        self.send_btn.setText("思考中..." if processing else "发送")
+
+    def _update_token_stats(self):
+        """更新 token 统计"""
+        try:
+            if not self.chat_conversation_id:
+                return
+
+            from src.database.repositories import MessageRepository
+            from src.database import get_db_session
+
+            msg_repo = MessageRepository(get_db_session())
+            messages = msg_repo.get_by_conversation(self.chat_conversation_id)
+
+            total_input = sum(m.input_tokens or 0 for m in messages)
+            total_output = sum(m.output_tokens or 0 for m in messages)
+            total_tokens = sum(m.total_tokens or 0 for m in messages)
+            max_context = max((m.context_length or 0 for m in messages), default=0)
+
+            if total_tokens > 0:
+                self.token_stats_label.setText(
+                    f"Tokens: {total_tokens:,} (入: {total_input:,}, 出: {total_output:,}) | 上下文: {max_context}"
+                )
+                self.token_stats_label.setStyleSheet("color: #10b981; font-size: 11px;")
+            else:
+                self.token_stats_label.setText(f"上下文: {max_context} 消息")
+                self.token_stats_label.setStyleSheet("color: #888; font-size: 11px;")
+        except Exception as e:
+            print(f"Token stats error: {e}")
+
+
+class HistoryWidget(QWidget):
+    """历史记录页面"""
+
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("historyWidget")
+        self._setup_ui()
+
+    def _setup_ui(self):
+        """设置界面"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # 标题卡片
+        title_card = SimpleCardWidget()
+        title_layout = QHBoxLayout(title_card)
+        title_layout.setContentsMargins(16, 12, 16, 12)
+        title_layout.addWidget(SubtitleLabel("修改历史"))
+        title_layout.addStretch()
+        layout.addWidget(title_card)
+
+        # 内容卡片
+        content_card = SimpleCardWidget()
+        content_layout = QVBoxLayout(content_card)
+        content_layout.setContentsMargins(16, 16, 16, 16)
+
+        content_layout.addWidget(BodyLabel("代码修改历史记录"))
+        layout.addWidget(content_card, 1)
+
+
+class BugWidget(QWidget):
+    """Bug 追踪页面"""
+
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("bugWidget")
+        self._setup_ui()
+
+    def _setup_ui(self):
+        """设置界面"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        title_card = SimpleCardWidget()
+        title_layout = QHBoxLayout(title_card)
+        title_layout.setContentsMargins(16, 12, 16, 12)
+        title_layout.addWidget(SubtitleLabel("Bug 追踪"))
+        title_layout.addStretch()
+        layout.addWidget(title_card)
+
+        content_card = SimpleCardWidget()
+        content_layout = QVBoxLayout(content_card)
+        content_layout.setContentsMargins(16, 16, 16, 16)
+        content_layout.addWidget(BodyLabel("Bug 追踪与管理"))
+        layout.addWidget(content_card, 1)
+
+
+class KnowledgeWidget(QWidget):
+    """知识库页面"""
+
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("knowledgeWidget")
+        self._setup_ui()
+
+    def _setup_ui(self):
+        """设置界面"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        title_card = SimpleCardWidget()
+        title_layout = QHBoxLayout(title_card)
+        title_layout.setContentsMargins(16, 12, 16, 12)
+        title_layout.addWidget(SubtitleLabel("知识库"))
+        title_layout.addStretch()
+        layout.addWidget(title_card)
+
+        content_card = SimpleCardWidget()
+        content_layout = QVBoxLayout(content_card)
+        content_layout.setContentsMargins(16, 16, 16, 16)
+        content_layout.addWidget(BodyLabel("知识库浏览与搜索"))
+        layout.addWidget(content_card, 1)
+
+
+class SettingsWidget(QWidget):
+    """设置页面"""
+
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("settingsWidget")
+        self._setup_ui()
+
+    def _setup_ui(self):
+        """设置界面"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        title_card = SimpleCardWidget()
+        title_layout = QHBoxLayout(title_card)
+        title_layout.setContentsMargins(16, 12, 16, 12)
+        title_layout.addWidget(SubtitleLabel("设置"))
+        title_layout.addStretch()
+        layout.addWidget(title_card)
+
+        # 配置说明卡片
+        config_card = CardWidget()
+        config_layout = QVBoxLayout(config_card)
+        config_layout.setContentsMargins(16, 16, 16, 16)
+
+        config_layout.addWidget(StrongBodyLabel("AI 配置说明"))
+
+        ccswitch_info = BodyLabel()
+        ccswitch_info.setText(
+            "本应用使用 CC-Switch 管理 AI 提供商配置。\n\n"
+            "配置步骤:\n"
+            "1. 下载并安装 CC-Switch\n"
+            "2. 在 CC-Switch 中添加您的 AI 提供商和 API 密钥\n"
+            "3. 启用您想要使用的提供商\n"
+            "4. 重启本应用即可自动读取配置"
+        )
+        ccswitch_info.setWordWrap(True)
+        ccswitch_info.setStyleSheet("""
+            BodyLabel {
+                padding: 16px;
+                background-color: rgba(13, 110, 253, 0.08);
+                border-radius: 8px;
+            }
+        """)
+        config_layout.addWidget(ccswitch_info)
+
+        # CC-Switch 状态
+        self.ccswitch_status_label = BodyLabel("正在检测 cc-switch...")
+        self.ccswitch_status_label.setStyleSheet("""
+            BodyLabel {
+                padding: 12px;
+                background-color: #f5f5f5;
+                border-radius: 6px;
+            }
+        """)
+        config_layout.addWidget(self.ccswitch_status_label)
+
+        layout.addWidget(config_card)
+        layout.addStretch()
+
+        # 刷新状态
+        self._refresh_ccswitch_status()
+
+    def _refresh_ccswitch_status(self):
+        """刷新 CC-Switch 状态"""
+        if provider_manager is None:
+            self.ccswitch_status_label.setText("❌ 服务未初始化")
+            return
+
+        try:
+            provider = provider_manager.get_ccswitch_active_provider()
+            if provider:
+                self.ccswitch_status_label.setText(f"✅ CC-Switch: {provider.name} ({provider.model})")
+                self.ccswitch_status_label.setStyleSheet("""
+                    BodyLabel {
+                        padding: 12px;
+                        background-color: #e8f5e9;
+                        color: #2e7d32;
+                        border-radius: 6px;
+                    }
+                """)
+            else:
+                self.ccswitch_status_label.setText("⚠️ 未检测到 cc-switch 配置")
+                self.ccswitch_status_label.setStyleSheet("""
+                    BodyLabel {
+                        padding: 12px;
+                        background-color: #fff3e0;
+                        color: #ef6c00;
+                        border-radius: 6px;
+                    }
+                """)
+        except Exception as e:
+            self.ccswitch_status_label.setText(f"❌ 检测失败: {e}")
+
+
+class MainWindow(FluentWindow):
+    """主窗口 - 使用 FluentWindow"""
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("CodeTraceAI - AI 编程辅助工具")
+        self.setMinimumSize(1200, 800)
+
+        # 初始化主题
+        self._init_theme()
+
+        # 创建子界面
+        self.chat_widget = ChatWidget()
+        self.history_widget = HistoryWidget()
+        self.bug_widget = BugWidget()
+        self.knowledge_widget = KnowledgeWidget()
+        self.settings_widget = SettingsWidget()
+
+        # 添加到导航
+        self.addSubInterface(
+            self.chat_widget, FluentIcon.CHAT, "AI 对话"
+        )
+        self.addSubInterface(
+            self.history_widget, FluentIcon.HISTORY, "修改历史"
+        )
+        self.addSubInterface(
+            self.bug_widget, FluentIcon.DEVELOPER_TOOLS, "Bug 追踪"
+        )
+        self.addSubInterface(
+            self.knowledge_widget, FluentIcon.DOCUMENT, "知识库"
+        )
+        self.addSubInterface(
+            self.settings_widget, FluentIcon.SETTING, "设置",
+            position=NavigationItemPosition.BOTTOM
+        )
+
+        # 设置窗口图标
+        self.setWindowTitle("CodeTraceAI")
+
+    def _init_theme(self):
+        """初始化主题"""
+        try:
+            cfg = config_service.get_config()
+            if cfg.theme == "dark":
+                setTheme(Theme.DARK)
+            elif cfg.theme == "light":
+                setTheme(Theme.LIGHT)
+            else:
+                setTheme(Theme.AUTO)
+        except:
+            setTheme(Theme.AUTO)
+
+
+def main():
+    """主函数"""
+    app = QApplication(sys.argv)
+    app.setApplicationName("CodeTraceAI")
+    app.setOrganizationName("CodeTraceAI")
+
+    # 设置应用样式
+    app.setStyle("Fusion")
+
+    # 创建主窗口
+    window = MainWindow()
+    window.show()
+
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

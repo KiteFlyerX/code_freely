@@ -32,58 +32,131 @@ class ConversationService:
         """设置当前工作目录"""
         self._current_work_dir = work_dir
 
-    def _generate_commit_message(self, user_question: str, ai_response: str) -> str:
+    async def _generate_commit_message(self, user_question: str, ai_response: str) -> str:
         """
-        根据用户问题和 AI 响应生成提交消息
+        使用 AI 分析代码变更并生成专业的提交消息
 
         Args:
             user_question: 用户的问题
             ai_response: AI 的响应
 
         Returns:
-            str: 生成的提交消息
+            str: AI 生成的提交消息
         """
-        # 从用户问题中提取关键信息
-        question_lower = user_question.lower()
+        import subprocess
 
-        # 关键词映射到提交类型
-        keywords_map = {
-            "修复": "fix",
-            "bug": "fix",
-            "错误": "fix",
-            "问题": "fix",
-            "添加": "feat",
-            "新增": "feat",
-            "实现": "feat",
-            "功能": "feat",
-            "删除": "refactor",
-            "移除": "refactor",
-            "重构": "refactor",
-            "优化": "perf",
-            "改进": "perf",
-            "修改": "chore",
-            "更新": "chore",
-            "调整": "chore",
-        }
+        target_dir = str(self._current_work_dir) if self._current_work_dir else str(Path.cwd())
 
-        # 确定提交类型
-        commit_type = "chore"  # 默认
-        for keyword, type_name in keywords_map.items():
-            if keyword in user_question:
-                commit_type = type_name
-                break
+        try:
+            # 先添加所有更改到暂存区
+            subprocess.run(
+                ['git', 'add', '-A'],
+                capture_output=True,
+                cwd=target_dir
+            )
 
-        # 提取简短描述（取用户问题的前 50 个字符）
-        description = user_question[:50].strip()
-        if len(user_question) > 50:
-            description += "..."
+            # 获取 git diff (暂存区的变更)
+            diff_result = subprocess.run(
+                ['git', 'diff', '--cached', '--unified=1'],
+                capture_output=True,
+                encoding='utf-8',
+                errors='replace',
+                text=True,
+                cwd=target_dir
+            )
 
-        # 组合提交消息
-        commit_msg = f"{commit_type}: {description}"
+            diff_content = diff_result.stdout.strip()
 
-        # 如果 AI 响应中包含总结信息，可以附加
-        # 但通常保持简洁更好
-        return commit_msg
+            if not diff_content:
+                # 没有变更
+                return None
+
+            # 限制 diff 大小，避免 token 过多
+            if len(diff_content) > 15000:
+                # 保留头部和尾部
+                half = 7000
+                diff_content = diff_content[:half] + "\n... (中间部分省略) ...\n" + diff_content[-half:]
+
+            # 获取变更的文件列表
+            status_result = subprocess.run(
+                ['git', 'status', '--short'],
+                capture_output=True,
+                encoding='utf-8',
+                errors='replace',
+                text=True,
+                cwd=target_dir
+            )
+
+            status_lines = status_result.stdout.strip().split('\n') if status_result.stdout.strip() else []
+            changed_files = []
+            for line in status_lines:
+                parts = line.split()
+                if len(parts) >= 2:
+                    changed_files.append(parts[1])
+
+            # 使用 AI 生成提交消息
+            ai_client = self._get_ai_client()
+
+            file_info = f"\n变更的文件: {', '.join(changed_files[:10])}"
+            if len(changed_files) > 10:
+                file_info += f" 等 {len(changed_files)} 个文件"
+
+            prompt = f"""分析以下代码变更，生成一个简洁的 Git 提交消息。
+
+用户需求: {user_question[:200]}
+{file_info}
+
+代码变更 (git diff --cached):
+```
+{diff_content}
+```
+
+请生成一个专业的 Git 提交消息，遵循以下规范：
+1. 使用 conventional commits 格式: <type>: <description>
+2. type 可以是: feat(新功能), fix(修复), refactor(重构), perf(性能优化), style(代码格式), docs(文档), test(测试), chore(构建/工具)
+3. description 应该简洁明了，说明改动的目的和内容
+4. 只返回一条提交消息，格式如: "fix: 修复用户登录时的验证错误"
+5. 不要加引号，不要有其他内容
+
+提交消息:"""
+
+            # 调用 AI 生成提交消息
+            from ..ai.base import Message, MessageRole, AIRequestConfig
+
+            messages = [
+                Message(role=MessageRole.SYSTEM, content="你是一个专业的 Git 提交消息生成助手。请分析代码变更并生成符合规范的提交消息。"),
+                Message(role=MessageRole.USER, content=prompt)
+            ]
+
+            config = AIRequestConfig(
+                temperature=0.2,  # 降低温度以获得更稳定的结果
+                max_tokens=100,   # 限制生成长度
+            )
+
+            response = await ai_client.chat(messages, config)
+
+            if response.content:
+                # 清理 AI 返回的内容
+                commit_msg = response.content.strip()
+                # 移除可能的引号
+                commit_msg = commit_msg.strip('"\'').strip()
+                # 移除可能的 "提交消息:" 前缀
+                if commit_msg.startswith("提交消息:"):
+                    commit_msg = commit_msg[5:].strip()
+                if commit_msg.startswith("message:"):
+                    commit_msg = commit_msg[8:].strip()
+                # 取第一行
+                commit_msg = commit_msg.split('\n')[0].strip()
+                return commit_msg
+
+            return "chore: 更新代码"
+
+        except Exception as e:
+            print(f"AI 生成提交消息失败: {e}")
+            import traceback
+            traceback.print_exc()
+            # 回退到简单生成方式
+            return f"chore: {user_question[:50]}"
 
     def _get_ai_client(self) -> BaseAI:
         """获取 AI 客户端"""
@@ -563,22 +636,31 @@ class ConversationService:
             config = config_service.get_config()
 
             if config.auto_commit:
-                # 生成提交消息（基于用户问题总结）
-                commit_msg = self._generate_commit_message(content, full_response)
+                # 使用 AI 生成提交消息
+                commit_msg = await self._generate_commit_message(content, full_response)
+
+                if commit_msg is None:
+                    # 没有变更需要提交
+                    return
 
                 # 执行提交
                 commit_result = self.commit_changes(commit_message=commit_msg, force=True)
 
                 if commit_result.get("success"):
                     # 提交成功，输出提示信息
-                    yield f"\n\n✅ 已自动提交到版本控制"
+                    yield f"\n\n✅ 已自动提交: {commit_msg}"
                     if commit_result.get("commit_id"):
-                        yield f" (提交: {commit_result['commit_id'][:8]})"
+                        yield f" ({commit_result['commit_id'][:8]})"
                     if commit_result.get("pushed"):
                         yield f" 并已推送到远程仓库"
+                elif "没有需要提交的更改" not in commit_result.get("error", ""):
+                    # 如果不是因为没更改而失败，显示错误
+                    yield f"\n\n⚠️ 自动提交失败: {commit_result.get('error', '')}"
         except Exception as e:
             # 自动提交失败不影响对话
             print(f"自动提交失败: {e}")
+            import traceback
+            traceback.print_exc()
 
     async def send_message_with_tools(
         self,

@@ -25,6 +25,9 @@ class ReviewView(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # 设置 objectName（FluentWindow 要求）
+        self.setObjectName("reviewView")
+
         self._setup_ui()
         self._load_reviews()
 

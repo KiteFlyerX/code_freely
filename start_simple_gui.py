@@ -397,6 +397,9 @@ class CodeTraceAIWindow(QMainWindow):
         # 深色模式标志
         self._dark_mode = True
 
+        # 工具自动批准列表
+        self._auto_approve_tools = set()
+
         # 创建中心部件
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -411,7 +414,6 @@ class CodeTraceAIWindow(QMainWindow):
             "修改历史",
             "Bug 追踪",
             "知识库",
-            "提供商管理",
             "设置"
         ])
         nav_list.setMaximumWidth(150)
@@ -426,7 +428,6 @@ class CodeTraceAIWindow(QMainWindow):
         self.create_history_page()
         self.create_bug_page()
         self.create_knowledge_page()
-        self.create_provider_page()
         self.create_settings_page()
 
         # 添加到布局
@@ -443,6 +444,9 @@ class CodeTraceAIWindow(QMainWindow):
         change_dir_btn.setMaximumWidth(80)
         change_dir_btn.clicked.connect(self._change_work_directory)
         self.statusBar.addPermanentWidget(change_dir_btn)
+
+        # 设置工具权限处理器（用于 GUI 确认对话框）
+        self._setup_tool_permission_handler()
 
     def _update_work_dir_display(self):
         """更新工作目录显示"""
@@ -523,6 +527,74 @@ class CodeTraceAIWindow(QMainWindow):
                     "切换失败",
                     f"无法切换到目录 {new_dir}:\n{str(e)}"
                 )
+
+    def _setup_tool_permission_handler(self):
+        """设置工具权限处理器"""
+        try:
+            from src.tools import tool_registry
+
+            def permission_handler(tool_name: str, arguments: dict) -> bool:
+                """权限检查处理器"""
+                # 检查是否在自动批准列表中
+                if tool_name in self._auto_approve_tools:
+                    return True
+
+                # 获取工具
+                tool = tool_registry.get(tool_name)
+                if not tool:
+                    return True
+
+                # 检查是否需要确认
+                if not getattr(tool, 'requires_confirmation', False):
+                    return True
+
+                # 构建确认消息
+                if hasattr(tool, 'get_confirmation_message'):
+                    message = tool.get_confirmation_message(**arguments)
+                else:
+                    message = f"确认执行 {tool_name}?"
+
+                # 创建自定义确认对话框
+                from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QCheckBox
+
+                dialog = QDialog(self)
+                dialog.setWindowTitle("确认操作")
+                dialog.setMinimumWidth(400)
+                layout = QVBoxLayout(dialog)
+
+                # 消息
+                msg_label = QLabel(message)
+                msg_label.setWordWrap(True)
+                layout.addWidget(msg_label)
+
+                # 总是允许复选框
+                always_allow_checkbox = QCheckBox("总是允许此工具（本次会话）")
+                layout.addWidget(always_allow_checkbox)
+
+                # 按钮
+                button_layout = QHBoxLayout()
+                yes_btn = QPushButton("允许")
+                no_btn = QPushButton("拒绝")
+                button_layout.addWidget(yes_btn)
+                button_layout.addWidget(no_btn)
+                layout.addLayout(button_layout)
+
+                yes_btn.clicked.connect(dialog.accept)
+                no_btn.clicked.connect(dialog.reject)
+
+                result = dialog.exec()
+
+                if result == QDialog.Accepted:
+                    # 如果勾选了"总是允许"，添加到自动批准列表
+                    if always_allow_checkbox.isChecked():
+                        self._auto_approve_tools.add(tool_name)
+                    return True
+                return False
+
+            # 设置权限处理器
+            tool_registry.set_permission_handler(permission_handler)
+        except Exception as e:
+            print(f"设置工具权限处理器失败: {e}")
 
     def create_chat_page(self):
         """创建聊天页面"""
@@ -936,117 +1008,36 @@ class CodeTraceAIWindow(QMainWindow):
         self.pages["知识库"] = page
         self.content_stack.addWidget(page)
 
-    def create_provider_page(self):
-        """创建提供商管理页面"""
-        page = QWidget()
-        layout = QVBoxLayout(page)
-
-        # 标题
-        layout.addWidget(QLabel("提供商管理"))
-
-        # 提供商列表
-        self.provider_list_widget = QListWidget()
-        layout.addWidget(QLabel("已配置的提供商:"))
-        layout.addWidget(self.provider_list_widget)
-
-        # 加载提供商
-        self._load_providers_in_page()
-
-        # 按钮区
-        button_layout = QHBoxLayout()
-
-        import_btn = QPushButton("从预设导入")
-        import_btn.clicked.connect(self._on_import_provider)
-        button_layout.addWidget(import_btn)
-
-        edit_btn = QPushButton("编辑提供商")
-        edit_btn.clicked.connect(self._on_edit_provider)
-        button_layout.addWidget(edit_btn)
-
-        switch_btn = QPushButton("切换提供商")
-        switch_btn.clicked.connect(self._on_switch_provider)
-        button_layout.addWidget(switch_btn)
-
-        layout.addLayout(button_layout)
-
-        # 快速更新 API Key 区
-        quick_update_layout = QHBoxLayout()
-        quick_update_layout.addWidget(QLabel("快速更新 API Key:"))
-
-        self.api_key_input = QLineEdit()
-        self.api_key_input.setPlaceholderText("选中提供商后输入新 API 密钥")
-        self.api_key_input.setEchoMode(QLineEdit.Password)
-        quick_update_layout.addWidget(self.api_key_input)
-
-        update_key_btn = QPushButton("更新")
-        update_key_btn.clicked.connect(self._on_quick_update_api_key)
-        quick_update_layout.addWidget(update_key_btn)
-
-        layout.addLayout(quick_update_layout)
-
-        # 预设列表
-        layout.addWidget(QLabel("可用的预设配置:"))
-
-        preset_list = QListWidget()
-        preset_list.setMaximumHeight(150)
-
-        # 按类别分组显示预设
-        categories = {}
-        if PROVIDER_PRESETS:
-            for preset in PROVIDER_PRESETS:
-                if preset.category not in categories:
-                    categories[preset.category] = []
-                categories[preset.category].append(preset)
-
-            for category, presets in categories.items():
-                preset_list.addItem(f"--- {category.upper()} ---")
-                for preset in presets:
-                    preset_list.addItem(f"  {preset.name} ({preset.id})")
-        else:
-            preset_list.addItem("  (无可用预设)")
-
-        layout.addWidget(preset_list)
-
-        # 说明
-        info = QLabel("提示: 点击 '从预设导入' 可以快速配置提供商")
-        info.setStyleSheet("color: gray; font-size: 11px;")
-        layout.addWidget(info)
-
-        self.pages["提供商管理"] = page
-        self.content_stack.addWidget(page)
-
-    def _load_providers_in_page(self):
-        """加载提供商列表"""
-        try:
-            self.provider_list_widget.clear()
-            providers = provider_manager.get_providers()
-            active = provider_manager.get_active_provider()
-
-            for p in providers:
-                is_active = " [活动中]" if active and p.id == active.id else ""
-                self.provider_list_widget.addItem(f"{p.name} ({p.id}){is_active}")
-        except Exception as e:
-            self.provider_list_widget.addItem(f"加载失败: {e}")
-
     def _on_edit_provider(self):
         """编辑提供商"""
-        current = self.provider_list_widget.currentItem()
-        if not current:
-            QMessageBox.warning(None, "提示", "请先选择要编辑的提供商")
-            return
+        from PySide6.QtWidgets import QInputDialog, QMessageBox
 
-        text = current.text()
-        # 解析提供商 ID
         try:
-            provider_id = text.split("(")[1].split(")")[0]
-        except IndexError:
-            QMessageBox.warning(None, "错误", "无法解析提供商 ID")
-            return
+            providers = provider_manager.get_providers()
+            if not providers:
+                QMessageBox.warning(None, "提示", "没有可用的提供商")
+                return
 
-        providers = provider_manager.get_providers()
-        provider = next((p for p in providers if p.id == provider_id), None)
+            # 创建提供商选择列表
+            provider_names = [f"{p.name} ({p.id})" for p in providers]
+            provider_map = {name: p for name, p in zip(provider_names, providers)}
 
-        if provider:
+            # 使用输入对话框让用户选择
+            from PySide6.QtWidgets import QInputDialog
+            ok, selected = QInputDialog.getItem(
+                None,
+                "选择提供商",
+                "请选择要编辑的提供商:",
+                provider_names,
+                0,
+                False
+            )
+
+            if not ok or not selected:
+                return
+
+            provider = provider_map[selected]
+
             # 创建编辑对话框
             from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QDialogButtonBox, QFormLayout
 
@@ -1062,8 +1053,8 @@ class CodeTraceAIWindow(QMainWindow):
             name_edit = QLineEdit(provider.name)
             form_layout.addRow("名称:", name_edit)
 
-            # API 端点（新增）
-            endpoint_edit = QLineEdit(provider.api_endpoint)
+            # API 端点
+            endpoint_edit = QLineEdit(provider.api_endpoint or "")
             endpoint_edit.setPlaceholderText("https://api.example.com (可选)")
             form_layout.addRow("API 端点:", endpoint_edit)
 
@@ -1072,7 +1063,7 @@ class CodeTraceAIWindow(QMainWindow):
             form_layout.addRow("模型:", model_edit)
 
             # API 密钥
-            api_key_edit = QLineEdit(provider.api_key)
+            api_key_edit = QLineEdit(provider.api_key or "")
             api_key_edit.setEchoMode(QLineEdit.Password)
             form_layout.addRow("API 密钥:", api_key_edit)
 
@@ -1110,7 +1101,7 @@ class CodeTraceAIWindow(QMainWindow):
                     custom_params=provider.custom_params,
                 )
 
-                if provider_manager.update_provider(provider_id, updated_config):
+                if provider_manager.update_provider(provider.id, updated_config):
                     QMessageBox.information(
                         None,
                         "成功",
@@ -1119,56 +1110,10 @@ class CodeTraceAIWindow(QMainWindow):
                         f"端点: {updated_config.api_endpoint or '(默认)'}\n"
                         f"模型: {updated_config.model}"
                     )
-                    self._load_providers_in_page()
                 else:
                     QMessageBox.warning(None, "失败", "更新提供商失败")
-
-    def _on_quick_update_api_key(self):
-        """快速更新 API Key"""
-        current = self.provider_list_widget.currentItem()
-        if not current:
-            QMessageBox.warning(None, "提示", "请先选择要更新 API Key 的提供商")
-            return
-
-        api_key = self.api_key_input.text().strip()
-        if not api_key:
-            QMessageBox.warning(None, "提示", "请输入新的 API 密码")
-            return
-
-        text = current.text()
-        try:
-            provider_id = text.split("(")[1].split(")")[0]
-        except IndexError:
-            QMessageBox.warning(None, "错误", "无法解析提供商 ID")
-            return
-
-        providers = provider_manager.get_providers()
-        provider = next((p for p in providers if p.id == provider_id), None)
-
-        if provider:
-            # 更新 API Key
-            from src.services.provider_service import ProviderConfig
-            updated_config = ProviderConfig(
-                id=provider.id,
-                name=provider.name,
-                provider_type=provider.provider_type,
-                api_key=api_key,
-                api_endpoint=provider.api_endpoint,
-                model=provider.model,
-                temperature=provider.temperature,
-                max_tokens=provider.max_tokens,
-                top_p=provider.top_p,
-                proxy_url=provider.proxy_url,
-                proxy_enabled=provider.proxy_enabled,
-                is_enabled=provider.is_enabled,
-                custom_params=provider.custom_params,
-            )
-
-            if provider_manager.update_provider(provider_id, updated_config):
-                QMessageBox.information(None, "成功", f"已更新 {provider.name} 的 API 密码")
-                self.api_key_input.clear()
-            else:
-                QMessageBox.warning(None, "失败", "更新 API 密码失败")
+        except Exception as e:
+            QMessageBox.critical(None, "错误", f"编辑提供商失败: {e}")
 
     def _on_import_provider(self):
         """导入提供商（简化版本）"""
@@ -1672,6 +1617,8 @@ class CodeTraceAIWindow(QMainWindow):
 
         config_layout.addWidget(QLabel("---"))
         config_layout.addWidget(QLabel("AI 配置"))
+
+        # 当前配置显示
         try:
             cfg = config_service.get_config()
             config_layout.addWidget(QLabel(f"提供商: {cfg.ai.provider}"))
@@ -1679,6 +1626,20 @@ class CodeTraceAIWindow(QMainWindow):
             config_layout.addWidget(QLabel(f"温度: {cfg.ai.temperature}"))
         except:
             config_layout.addWidget(QLabel("无法加载配置"))
+
+        # 操作按钮
+        button_layout = QHBoxLayout()
+        add_provider_btn = QPushButton("添加提供商")
+        add_provider_btn.clicked.connect(self._add_provider)
+        button_layout.addWidget(add_provider_btn)
+        edit_provider_btn = QPushButton("编辑提供商")
+        edit_provider_btn.clicked.connect(self._edit_provider)
+        button_layout.addWidget(edit_provider_btn)
+        switch_provider_btn = QPushButton("切换提供商")
+        switch_provider_btn.clicked.connect(self._switch_provider)
+        button_layout.addWidget(switch_provider_btn)
+        button_layout.addStretch()
+        config_layout.addLayout(button_layout)
 
         config_layout.addStretch()
         layout.addWidget(config_widget)
@@ -1709,6 +1670,18 @@ class CodeTraceAIWindow(QMainWindow):
                 self.toolbar_auto_commit_checkbox.blockSignals(True)
                 self.toolbar_auto_commit_checkbox.setChecked(is_checked)
                 self.toolbar_auto_commit_checkbox.blockSignals(False)
+
+    def _add_provider(self):
+        """添加提供商（从设置页面调用）"""
+        self._on_import_provider()
+
+    def _edit_provider(self):
+        """编辑提供商（从设置页面调用）"""
+        self._on_edit_provider()
+
+    def _switch_provider(self):
+        """切换提供商（从设置页面调用）"""
+        self._on_switch_provider()
 
     def keyPressEvent(self, event):
         """处理键盘事件"""

@@ -112,6 +112,7 @@ class Write(BaseTool):
         super().__init__()
         self.name = "Write"
         self.category = ToolCategory.FILE
+        self.requires_confirmation = True  # 需要用户确认
         self.description = "将内容写入文件。如果文件已存在，将会覆盖整个文件。如果要修改现有文件，请先使用 Read 工具读取文件内容。"
         self.parameters = [
             ToolParameter(
@@ -127,6 +128,13 @@ class Write(BaseTool):
                 required=True,
             ),
         ]
+
+    def get_confirmation_message(self, **kwargs) -> str:
+        """获取确认消息"""
+        file_path = kwargs.get("file_path", "")
+        content = kwargs.get("content", "")
+        content_preview = content[:100] + "..." if len(content) > 100 else content
+        return f"确认写入文件?\n路径: {file_path}\n内容预览: {content_preview}"
 
     def execute(self, file_path: str, content: str) -> ToolResult:
         """执行文件写入"""

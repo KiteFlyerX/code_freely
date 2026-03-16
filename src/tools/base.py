@@ -2,7 +2,7 @@
 工具系统
 提供 AI 可调用的工具，用于读取文件、写入代码、执行命令等
 """
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 from dataclasses import dataclass
 from enum import Enum
 
@@ -54,6 +54,7 @@ class BaseTool:
         self.category = ToolCategory.SYSTEM
         self.description = ""
         self.parameters: List[ToolParameter] = []
+        self.requires_confirmation: bool = False  # 是否需要用户确认
 
     def get_schema(self) -> Dict[str, Any]:
         """
@@ -101,6 +102,18 @@ class BaseTool:
         """
         raise NotImplementedError("子类必须实现 execute 方法")
 
+    def get_confirmation_message(self, **kwargs) -> str:
+        """
+        获取确认消息（当需要用户确认时）
+
+        Args:
+            **kwargs: 工具参数
+
+        Returns:
+            str: 确认消息
+        """
+        return f"确认执行 {self.name}?"
+
 
 class ToolRegistry:
     """
@@ -110,6 +123,7 @@ class ToolRegistry:
 
     _instance: Optional["ToolRegistry"] = None
     _tools: Dict[str, BaseTool] = {}
+    _permission_handler: Optional[Callable[[str, Dict[str, Any]], bool]] = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -123,6 +137,16 @@ class ToolRegistry:
     def get(self, name: str) -> Optional[BaseTool]:
         """获取工具"""
         return self._tools.get(name)
+
+    def set_permission_handler(self, handler: Callable[[str, Dict[str, Any]], bool]):
+        """
+        设置权限处理器
+
+        Args:
+            handler: 权限检查函数 (tool_name, arguments) -> bool
+                     返回 True 表示允许执行，False 表示拒绝
+        """
+        self._permission_handler = handler
 
     def list_tools(self, category: Optional[ToolCategory] = None) -> List[BaseTool]:
         """列出工具"""
@@ -143,6 +167,16 @@ class ToolRegistry:
                 success=False,
                 error=f"工具 '{tool_name}' 不存在"
             )
+
+        # 检查权限
+        if self._permission_handler:
+            allowed = self._permission_handler(tool_name, kwargs)
+            if not allowed:
+                return ToolResult(
+                    success=False,
+                    error=f"工具 '{tool_name}' 执行被用户拒绝"
+                )
+
         return tool.execute(**kwargs)
 
 

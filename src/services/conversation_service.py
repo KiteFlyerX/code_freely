@@ -32,6 +32,59 @@ class ConversationService:
         """设置当前工作目录"""
         self._current_work_dir = work_dir
 
+    def _generate_commit_message(self, user_question: str, ai_response: str) -> str:
+        """
+        根据用户问题和 AI 响应生成提交消息
+
+        Args:
+            user_question: 用户的问题
+            ai_response: AI 的响应
+
+        Returns:
+            str: 生成的提交消息
+        """
+        # 从用户问题中提取关键信息
+        question_lower = user_question.lower()
+
+        # 关键词映射到提交类型
+        keywords_map = {
+            "修复": "fix",
+            "bug": "fix",
+            "错误": "fix",
+            "问题": "fix",
+            "添加": "feat",
+            "新增": "feat",
+            "实现": "feat",
+            "功能": "feat",
+            "删除": "refactor",
+            "移除": "refactor",
+            "重构": "refactor",
+            "优化": "perf",
+            "改进": "perf",
+            "修改": "chore",
+            "更新": "chore",
+            "调整": "chore",
+        }
+
+        # 确定提交类型
+        commit_type = "chore"  # 默认
+        for keyword, type_name in keywords_map.items():
+            if keyword in user_question:
+                commit_type = type_name
+                break
+
+        # 提取简短描述（取用户问题的前 50 个字符）
+        description = user_question[:50].strip()
+        if len(user_question) > 50:
+            description += "..."
+
+        # 组合提交消息
+        commit_msg = f"{commit_type}: {description}"
+
+        # 如果 AI 响应中包含总结信息，可以附加
+        # 但通常保持简洁更好
+        return commit_msg
+
     def _get_ai_client(self) -> BaseAI:
         """获取 AI 客户端"""
         if self._ai_client is None:
@@ -503,6 +556,29 @@ class ConversationService:
             content=full_response,
             model=ai_client.model,
         )
+
+        # 自动提交：AI 完成响应后，检查是否有更改需要提交
+        try:
+            from .config_service import config_service
+            config = config_service.get_config()
+
+            if config.auto_commit:
+                # 生成提交消息（基于用户问题总结）
+                commit_msg = self._generate_commit_message(content, full_response)
+
+                # 执行提交
+                commit_result = self.commit_changes(commit_message=commit_msg, force=True)
+
+                if commit_result.get("success"):
+                    # 提交成功，输出提示信息
+                    yield f"\n\n✅ 已自动提交到版本控制"
+                    if commit_result.get("commit_id"):
+                        yield f" (提交: {commit_result['commit_id'][:8]})"
+                    if commit_result.get("pushed"):
+                        yield f" 并已推送到远程仓库"
+        except Exception as e:
+            # 自动提交失败不影响对话
+            print(f"自动提交失败: {e}")
 
     async def send_message_with_tools(
         self,

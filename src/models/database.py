@@ -66,7 +66,15 @@ class ConversationMessage(Base):
 
     # AI 响应元数据
     model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    tokens_used: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    # Token 统计
+    tokens_used: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 保留用于兼容
+    input_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 输入 tokens
+    output_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 输出 tokens
+    total_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 总 tokens
+
+    # 上下文信息
+    context_length: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 上下文消息数
 
     # 关联
     conversation: Mapped["Conversation"] = relationship("Conversation", back_populates="messages")

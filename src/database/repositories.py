@@ -76,6 +76,10 @@ class MessageRepository(BaseRepository):
         content: str,
         model: Optional[str] = None,
         tokens_used: Optional[int] = None,
+        input_tokens: Optional[int] = None,
+        output_tokens: Optional[int] = None,
+        total_tokens: Optional[int] = None,
+        context_length: Optional[int] = None,
     ) -> ConversationMessage:
         """创建新消息"""
         message = ConversationMessage(
@@ -83,7 +87,11 @@ class MessageRepository(BaseRepository):
             role=role,
             content=content,
             model=model,
-            tokens_used=tokens_used,
+            tokens_used=tokens_used,  # 保留用于兼容
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            context_length=context_length,
         )
         self.session.add(message)
         self.session.flush()

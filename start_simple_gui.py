@@ -565,6 +565,13 @@ class CodeTraceAIWindow(QMainWindow):
         self.chat_status_label.setStyleSheet("color: orange; font-size: 11px;")
         toolbar.addWidget(self.chat_status_label)
 
+        # Token 统计
+        toolbar.addWidget(QLabel("|"))
+        self.token_stats_label = QLabel("Tokens: -")
+        self.token_stats_label.setStyleSheet("color: #666; font-size: 10px;")
+        self.token_stats_label.setToolTip("当前对话的 Token 使用情况")
+        toolbar.addWidget(self.token_stats_label)
+
         toolbar.addStretch()
 
         # 自动提交复选框
@@ -892,9 +899,11 @@ class CodeTraceAIWindow(QMainWindow):
                         html_content = format_chat_message(full_response)
                         self.chat_area.insertHtml(html_content)
 
-                    # 确保启用输入框
                     self.chat_input.setEnabled(True)
                     self.chat_input.setFocus()
+
+                    # 更新 token 统计
+                    self._update_token_stats()
                 elif status == "error":
                     # 错误
                     if "timeout" in str(data).lower() or "timed out" in str(data).lower():
@@ -912,6 +921,54 @@ class CodeTraceAIWindow(QMainWindow):
 
         # 立即开始检查
         QTimer.singleShot(10, check_result)
+
+    def _update_token_stats(self):
+        """更新 token 统计显示"""
+        try:
+            if not hasattr(self, 'chat_conversation_id') or self.chat_conversation_id is None:
+                return
+
+            from src.database.repositories import MessageRepository
+            from src.database import get_db_session
+
+            msg_repo = MessageRepository(get_db_session())
+            messages = msg_repo.get_by_conversation(self.chat_conversation_id)
+
+            # 统计 token 使用情况
+            total_input = 0
+            total_output = 0
+            total_tokens = 0
+            max_context = 0
+
+            for msg in messages:
+                if msg.input_tokens:
+                    total_input += msg.input_tokens
+                if msg.output_tokens:
+                    total_output += msg.output_tokens
+                if msg.total_tokens:
+                    total_tokens += msg.total_tokens
+                if msg.context_length and msg.context_length > max_context:
+                    max_context = msg.context_length
+
+            # 显示统计信息
+            if total_tokens > 0:
+                self.token_stats_label.setText(
+                    f"Tokens: {total_tokens:,} (入: {total_input:,}, 出: {total_output:,}) | 上下文: {max_context} 消息"
+                )
+                self.token_stats_label.setStyleSheet("color: #4caf50; font-size: 10px;")
+            elif total_input > 0 or total_output > 0:
+                # 部分统计可用
+                self.token_stats_label.setText(
+                    f"Tokens: 入 {total_input:,}, 出 {total_output:,} | 上下文: {max_context} 消息"
+                )
+                self.token_stats_label.setStyleSheet("color: #ff9800; font-size: 10px;")
+            else:
+                # 无 token 统计
+                self.token_stats_label.setText(f"上下文: {max_context} 消息")
+                self.token_stats_label.setStyleSheet("color: #999; font-size: 10px;")
+
+        except Exception as e:
+            print(f"更新 token 统计失败: {e}")
 
     def create_history_page(self):
         """创建历史页面"""

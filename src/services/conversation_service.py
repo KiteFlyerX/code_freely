@@ -494,12 +494,22 @@ class ConversationService:
             response = await ai_client.chat(messages, ai_config)
 
         # 保存 AI 响应
+        # 计算 token 统计和上下文长度
+        input_tokens = response.usage.get("input_tokens") if response.usage else None
+        output_tokens = response.usage.get("output_tokens") if response.usage else None
+        total_tokens = response.usage.get("total_tokens") if response.usage else None
+        context_length = len(messages)  # 上下文消息数
+
         ai_message = self._message_repo.create(
             conversation_id=conversation_id,
             role=MessageRole.ASSISTANT.value,
             content=response.content,
             model=response.model,
-            tokens_used=response.usage.get("output_tokens") if response.usage else None,
+            tokens_used=output_tokens,  # 保留用于兼容
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            context_length=context_length,
         )
 
         return ai_message
@@ -631,11 +641,14 @@ class ConversationService:
             yield chunk
 
         # 保存 AI 响应
+        # 流式响应暂时无法获取详细 token 统计，只保存上下文长度
+        context_length = len(messages)
         self._message_repo.create(
             conversation_id=conversation_id,
             role=MessageRole.ASSISTANT.value,
             content=full_response,
             model=ai_client.model,
+            context_length=context_length,
         )
 
         # 自动提交：AI 完成响应后，检查是否有更改需要提交

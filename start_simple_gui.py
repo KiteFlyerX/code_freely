@@ -928,19 +928,26 @@ class CodeTraceAIWindow(QMainWindow):
         # 搜索栏
         search_layout = QHBoxLayout()
         search_layout.addWidget(QLabel("搜索:"))
-        search_input = QTextEdit()
-        search_input.setMaximumHeight(25)
-        search_input.setPlaceholderText("输入关键词...")
-        search_layout.addWidget(search_input)
+
+        from PySide6.QtWidgets import QLineEdit
+        self.knowledge_search_input = QLineEdit()
+        self.knowledge_search_input.setPlaceholderText("输入关键词搜索知识库...")
+        # 添加回车搜索功能
+        self.knowledge_search_input.returnPressed.connect(self._on_knowledge_search)
+        search_layout.addWidget(self.knowledge_search_input)
 
         search_btn = QPushButton("搜索")
+        search_btn.clicked.connect(self._on_knowledge_search)
         search_layout.addWidget(search_btn)
 
         layout.addLayout(search_layout)
 
         # 结果列表
-        result_list = QListWidget()
-        layout.addWidget(result_list)
+        self.knowledge_result_list = QListWidget()
+        layout.addWidget(self.knowledge_result_list)
+
+        # 初始化时加载知识库条目
+        self._load_knowledge_entries()
 
         self.pages["知识库"] = page
         self.content_stack.addWidget(page)
@@ -1486,6 +1493,40 @@ class CodeTraceAIWindow(QMainWindow):
                     font-weight: 500;
                 }
             """)
+
+    def _load_knowledge_entries(self):
+        """加载知识库条目"""
+        try:
+            entries = knowledge_service.list_entries(limit=50)
+            self.knowledge_result_list.clear()
+
+            for entry in entries:
+                item_text = f"[{entry.category}] {entry.title}"
+                self.knowledge_result_list.addItem(item_text)
+        except Exception as e:
+            print(f"加载知识库失败: {e}")
+
+    def _on_knowledge_search(self):
+        """搜索知识库"""
+        keyword = self.knowledge_search_input.text().strip()
+        if not keyword:
+            self._load_knowledge_entries()
+            return
+
+        try:
+            # 使用知识库服务的搜索功能
+            results = knowledge_service.search(keyword)
+            self.knowledge_result_list.clear()
+
+            if not results:
+                self.knowledge_result_list.addItem("未找到匹配的知识库条目")
+            else:
+                for entry in results:
+                    item_text = f"[{entry.category}] {entry.title}"
+                    self.knowledge_result_list.addItem(item_text)
+        except Exception as e:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "搜索失败", f"搜索知识库时出错:\n{str(e)}")
 
     def keyPressEvent(self, event):
         """处理键盘事件"""

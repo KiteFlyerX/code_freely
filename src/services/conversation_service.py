@@ -73,12 +73,13 @@ class ConversationService:
             # 恢复原工作目录
             os.chdir(old_cwd)
 
-    def commit_changes(self, commit_message: Optional[str] = None) -> Optional[dict]:
+    def commit_changes(self, commit_message: Optional[str] = None, force: bool = False) -> Optional[dict]:
         """
         提交当前工作目录的所有更改
 
         Args:
             commit_message: 自定义提交消息，如果为 None 则自动生成
+            force: 是否强制提交（忽略 auto_commit 配置）
 
         Returns:
             dict: 提交结果，包含 success, commit_id, commit_msg 等信息
@@ -89,10 +90,11 @@ class ConversationService:
         target_dir = str(self._current_work_dir) if self._current_work_dir else str(Path.cwd())
 
         try:
-            # 检查是否启用自动提交
-            config = config_service.get_config()
-            if not config.auto_commit:
-                return {"success": False, "error": "自动提交未启用"}
+            # 检查是否启用自动提交（除非强制提交）
+            if not force:
+                config = config_service.get_config()
+                if not config.auto_commit:
+                    return {"success": False, "error": "自动提交未启用"}
 
             # 检查是否有 VCS
             vcs = get_vcs(target_dir)
@@ -123,13 +125,16 @@ class ConversationService:
 
             for line in status_result.stdout.strip().split('\n'):
                 if line:
-                    status, path = line.strip().split(maxsplit=1)
-                    if status.startswith('A'):
-                        added_files.append(path)
-                    elif status.startswith('M'):
-                        modified_files.append(path)
-                    elif status.startswith('D'):
-                        deleted_files.append(path)
+                    parts = line.strip().split()
+                    if len(parts) >= 2:
+                        status = parts[0]
+                        path = parts[1]
+                        if status.startswith('A'):
+                            added_files.append(path)
+                        elif status.startswith('M'):
+                            modified_files.append(path)
+                        elif status.startswith('D'):
+                            deleted_files.append(path)
 
             # 生成提交消息
             if commit_message is None:

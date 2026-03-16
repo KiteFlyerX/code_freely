@@ -960,8 +960,8 @@ class CodeTraceAIWindow(QMainWindow):
             # 设置工作目录
             conversation_service.set_work_dir(self.current_work_dir)
 
-            # 执行提交
-            result = conversation_service.commit_changes()
+            # 执行提交（force=True 强制提交，忽略 auto_commit 配置）
+            result = conversation_service.commit_changes(force=True)
 
             if result.get("success"):
                 # 提交成功
@@ -969,7 +969,7 @@ class CodeTraceAIWindow(QMainWindow):
                 msg += f"提交信息: {result.get('commit_msg', 'N/A')}\n"
 
                 if result.get("commit_id"):
-                    msg += f"提交 ID: {result['commit_id']}\n"
+                    msg += f"提交 ID: {result['commit_id'][:8]}\n"
 
                 files = result.get("files", {})
                 if files.get("added"):

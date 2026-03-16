@@ -40,10 +40,25 @@ try:
     )
     from src.services.bug_service import bug_service, BugCreateInfo
     from src.services.knowledge_service import knowledge_service, KnowledgeCreateInfo
+    from src.tools import tool_registry
     init_database()
-    print("Services loaded successfully")
+
+    # 验证工具是否正确注册
+    tools = tool_registry.list_tools()
+    print(f"Services loaded successfully. Registered tools: {[t.name for t in tools]}")
+
+    # 确保默认工具已注册
+    if len(tools) == 0:
+        print("Warning: No tools registered. Registering default tools...")
+        from src.tools.default_tools import register_default_tools
+        register_default_tools()
+        tools = tool_registry.list_tools()
+        print(f"Default tools registered: {[t.name for t in tools]}")
+
 except Exception as e:
     print(f"Warning: Some services failed to load: {e}")
+    import traceback
+    traceback.print_exc()
     # 设置默认值避免程序崩溃
     provider_manager = None
     config_service = None

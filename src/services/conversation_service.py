@@ -188,6 +188,14 @@ class ConversationService:
 
         try:
             os.chdir(target_dir)
+
+            # 确保参数不为 None
+            if arguments is None:
+                arguments = {}
+
+            # 添加日志用于调试
+            print(f"[DEBUG] 执行工具: {tool_name}, 参数: {arguments}")
+
             result = tool_registry.execute(tool_name, **arguments)
             result_dict = result.to_dict()
 

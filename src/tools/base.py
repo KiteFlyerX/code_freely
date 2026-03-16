@@ -168,6 +168,9 @@ class ToolRegistry:
                 error=f"工具 '{tool_name}' 不存在"
             )
 
+        # 添加调试日志
+        print(f"[DEBUG] ToolRegistry.execute: tool={tool_name}, kwargs={kwargs}")
+
         # 检查权限
         if self._permission_handler:
             allowed = self._permission_handler(tool_name, kwargs)
@@ -177,7 +180,19 @@ class ToolRegistry:
                     error=f"工具 '{tool_name}' 执行被用户拒绝"
                 )
 
-        return tool.execute(**kwargs)
+        try:
+            return tool.execute(**kwargs)
+        except TypeError as e:
+            # 参数错误，提供更详细的错误信息
+            return ToolResult(
+                success=False,
+                error=f"工具 '{tool_name}' 参数错误: {str(e)}。提供的参数: {list(kwargs.keys())}"
+            )
+        except Exception as e:
+            return ToolResult(
+                success=False,
+                error=f"工具 '{tool_name}' 执行失败: {str(e)}"
+            )
 
 
 # 全局工具注册表实例

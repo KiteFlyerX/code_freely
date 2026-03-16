@@ -13,7 +13,8 @@
       "Read(//c/Users/Administrator/.cc-switch/**)",
       "Read(//e/workspaces/python/CodeTraceAI/$APPDATA/**)",
       "Read(//e/workspaces/python/CodeTraceAI/$LOCALAPPDATA/**)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(mkdir:*)"
     ]
   }
 }

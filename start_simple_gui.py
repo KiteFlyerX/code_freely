@@ -571,9 +571,9 @@ class CodeTraceAIWindow(QMainWindow):
         new_btn.clicked.connect(self._on_new_chat)
         toolbar.addWidget(new_btn)
 
-        commit_btn = QPushButton("提交代码")
-        commit_btn.setToolTip("提交当前目录的代码更改")
-        commit_btn.clicked.connect(self._on_commit_code)
+        commit_btn = QPushButton("提交更改")
+        commit_btn.setToolTip("提交当前目录的所有代码更改")
+        commit_btn.clicked.connect(self._on_commit_changes)
         toolbar.addWidget(commit_btn)
 
         layout.addLayout(toolbar)
@@ -951,6 +951,46 @@ class CodeTraceAIWindow(QMainWindow):
 
         self.pages["知识库"] = page
         self.content_stack.addWidget(page)
+
+    def _on_commit_changes(self):
+        """提交所有更改（使用 conversation_service 批量提交）"""
+        from PySide6.QtWidgets import QMessageBox
+
+        try:
+            # 设置工作目录
+            conversation_service.set_work_dir(self.current_work_dir)
+
+            # 执行提交
+            result = conversation_service.commit_changes()
+
+            if result.get("success"):
+                # 提交成功
+                msg = f"提交成功！\n\n"
+                msg += f"提交信息: {result.get('commit_msg', 'N/A')}\n"
+
+                if result.get("commit_id"):
+                    msg += f"提交 ID: {result['commit_id']}\n"
+
+                files = result.get("files", {})
+                if files.get("added"):
+                    msg += f"新增文件: {len(files['added'])} 个\n"
+                if files.get("modified"):
+                    msg += f"修改文件: {len(files['modified'])} 个\n"
+                if files.get("deleted"):
+                    msg += f"删除文件: {len(files['deleted'])} 个\n"
+
+                if result.get("pushed"):
+                    msg += "\n✅ 已推送到远程仓库"
+                elif result.get("push_error"):
+                    msg += f"\n⚠️ 推送失败: {result['push_error']}"
+
+                QMessageBox.information(self, "提交成功", msg)
+            else:
+                # 提交失败
+                error = result.get("error", "未知错误")
+                QMessageBox.warning(self, "提交失败", f"无法提交代码:\n{error}")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"提交代码时出错:\n{str(e)}")
 
     def _on_commit_code(self):
         """提交代码功能 - 支持 Git 和 SVN"""

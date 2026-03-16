@@ -65,163 +65,182 @@ class ConversationService:
             result = tool_registry.execute(tool_name, **arguments)
             result_dict = result.to_dict()
 
-            # 自动提交：如果是 Write 工具且执行成功
-            if tool_name == "Write" and result_dict.get('success'):
-                try:
-                    from .config_service import config_service
-                    config = config_service.get_config()
-
-                    if config.auto_commit:
-                        vcs = get_vcs(target_dir)
-                        if vcs:
-                            file_path = arguments.get('file_path', '')
-
-                            # 获取 git diff 来生成更准确的提交消息
-                            try:
-                                import subprocess
-                                # 获取修改的文件列表
-                                status_result = subprocess.run(
-                                    ['git', 'status', '--short'],
-                                    capture_output=True,
-                                    encoding='utf-8',
-                                    errors='replace',
-                                    text=True,
-                                    cwd=target_dir
-                                )
-
-                                # 生成提交消息（参考 Claude Code 的方式）
-                                if status_result.returncode == 0:
-                                    # 分析变更类型
-                                    added_files = []
-                                    modified_files = []
-                                    deleted_files = []
-
-                                    for line in status_result.stdout.strip().split('\n'):
-                                        if line:
-                                            status, path = line.strip().split(maxsplit=1)
-                                            if status.startswith('A'):
-                                                added_files.append(path)
-                                            elif status.startswith('M'):
-                                                modified_files.append(path)
-                                            elif status.startswith('D'):
-                                                deleted_files.append(path)
-
-                                    # 生成友好的提交消息
-                                    if added_files and not modified_files and not deleted_files:
-                                        commit_msg = f"Add {', '.join(added_files[:3])}"
-                                        if len(added_files) > 3:
-                                            commit_msg += f" and {len(added_files) - 3} more files"
-                                    elif modified_files and not added_files and not deleted_files:
-                                        commit_msg = f"Update {', '.join(modified_files[:3])}"
-                                        if len(modified_files) > 3:
-                                            commit_msg += f" and {len(modified_files) - 3} more files"
-                                    else:
-                                        # 混合变更
-                                        parts = []
-                                        if added_files:
-                                            parts.append(f"add {len(added_files)} file(s)")
-                                        if modified_files:
-                                            parts.append(f"update {len(modified_files)} file(s)")
-                                        if deleted_files:
-                                            parts.append(f"delete {len(deleted_files)} file(s)")
-                                        commit_msg = f"{', '.join(parts)}"
-
-                                    # 添加前缀
-                                    commit_msg = f"✨ {commit_msg}"
-                                else:
-                                    commit_msg = f"Update {file_path}"
-
-                                # 执行 git add 和 commit
-                                add_result = subprocess.run(
-                                    ['git', 'add', '-A'],
-                                    capture_output=True,
-                                    encoding='utf-8',
-                                    errors='replace',
-                                    cwd=target_dir
-                                )
-
-                                if add_result.returncode == 0:
-                                    commit_result = subprocess.run(
-                                        ['git', 'commit', '-m', commit_msg],
-                                        capture_output=True,
-                                        encoding='utf-8',
-                                        errors='replace',
-                                        cwd=target_dir
-                                    )
-
-                                    if commit_result.returncode == 0:
-                                        # 获取 commit hash
-                                        hash_result = subprocess.run(
-                                            ['git', 'rev-parse', 'HEAD'],
-                                            capture_output=True,
-                                            encoding='utf-8',
-                                            errors='replace',
-                                            text=True,
-                                            cwd=target_dir
-                                        )
-                                        commit_id = hash_result.stdout.strip() if hash_result.returncode == 0 else None
-
-                                        # 添加提交信息到结果中
-                                        if 'data' not in result_dict:
-                                            result_dict['data'] = {}
-                                        result_dict['data']['auto_committed'] = True
-                                        result_dict['data']['commit_id'] = commit_id
-                                        result_dict['data']['commit_msg'] = commit_msg
-
-                                        # 推送到远程仓库
-                                        try:
-                                            # 检查是否有远程仓库
-                                            remote_result = subprocess.run(
-                                                ['git', 'remote'],
-                                                capture_output=True,
-                                                encoding='utf-8',
-                                                errors='replace',
-                                                text=True,
-                                                cwd=target_dir
-                                            )
-
-                                            if remote_result.returncode == 0 and remote_result.stdout.strip():
-                                                # 有远程仓库，执行推送
-                                                push_result = subprocess.run(
-                                                    ['git', 'push'],
-                                                    capture_output=True,
-                                                    encoding='utf-8',
-                                                    errors='replace',
-                                                    text=True,
-                                                    cwd=target_dir,
-                                                    timeout=60  # 60秒超时
-                                                )
-
-                                                if push_result.returncode == 0:
-                                                    result_dict['data']['auto_pushed'] = True
-                                                    result_dict['data']['push_success'] = True
-                                                else:
-                                                    # 推送失败，但不影响提交结果
-                                                    result_dict['data']['auto_pushed'] = True
-                                                    result_dict['data']['push_success'] = False
-                                                    result_dict['data']['push_error'] = push_result.stderr or "推送失败"
-                                            else:
-                                                # 没有远程仓库
-                                                result_dict['data']['auto_pushed'] = False
-                                                result_dict['data']['push_skipped_reason'] = "no_remote"
-                                        except subprocess.TimeoutExpired:
-                                            result_dict['data']['auto_pushed'] = True
-                                            result_dict['data']['push_success'] = False
-                                            result_dict['data']['push_error'] = "推送超时"
-                                        except Exception as push_error:
-                                            result_dict['data']['auto_pushed'] = True
-                                            result_dict['data']['push_success'] = False
-                                            result_dict['data']['push_error'] = str(push_error)
-                            except Exception as e:
-                                print(f"自动提交失败: {e}")
-                except Exception as e:
-                    # 自动提交失败不影响工具执行结果
-                    print(f"自动提交处理失败: {e}")
+            # 不再每次 Write 都自动提交，改为批量提交
+            # 移除了原有的自动提交逻辑
 
             return result_dict
         finally:
             # 恢复原工作目录
             os.chdir(old_cwd)
+
+    def commit_changes(self, commit_message: Optional[str] = None) -> Optional[dict]:
+        """
+        提交当前工作目录的所有更改
+
+        Args:
+            commit_message: 自定义提交消息，如果为 None 则自动生成
+
+        Returns:
+            dict: 提交结果，包含 success, commit_id, commit_msg 等信息
+        """
+        import subprocess
+        from .config_service import config_service
+
+        target_dir = str(self._current_work_dir) if self._current_work_dir else str(Path.cwd())
+
+        try:
+            # 检查是否启用自动提交
+            config = config_service.get_config()
+            if not config.auto_commit:
+                return {"success": False, "error": "自动提交未启用"}
+
+            # 检查是否有 VCS
+            vcs = get_vcs(target_dir)
+            if not vcs:
+                return {"success": False, "error": "不是版本控制仓库"}
+
+            # 获取文件状态
+            status_result = subprocess.run(
+                ['git', 'status', '--short'],
+                capture_output=True,
+                encoding='utf-8',
+                errors='replace',
+                text=True,
+                cwd=target_dir
+            )
+
+            if status_result.returncode != 0:
+                return {"success": False, "error": "获取文件状态失败"}
+
+            # 检查是否有更改
+            if not status_result.stdout.strip():
+                return {"success": False, "error": "没有需要提交的更改"}
+
+            # 分析变更类型
+            added_files = []
+            modified_files = []
+            deleted_files = []
+
+            for line in status_result.stdout.strip().split('\n'):
+                if line:
+                    status, path = line.strip().split(maxsplit=1)
+                    if status.startswith('A'):
+                        added_files.append(path)
+                    elif status.startswith('M'):
+                        modified_files.append(path)
+                    elif status.startswith('D'):
+                        deleted_files.append(path)
+
+            # 生成提交消息
+            if commit_message is None:
+                # 自动生成提交消息
+                if added_files and not modified_files and not deleted_files:
+                    commit_message = f"Add {', '.join(added_files[:3])}"
+                    if len(added_files) > 3:
+                        commit_message += f" and {len(added_files) - 3} more files"
+                elif modified_files and not added_files and not deleted_files:
+                    commit_message = f"Update {', '.join(modified_files[:3])}"
+                    if len(modified_files) > 3:
+                        commit_message += f" and {len(modified_files) - 3} more files"
+                else:
+                    # 混合变更
+                    parts = []
+                    if added_files:
+                        parts.append(f"add {len(added_files)} file(s)")
+                    if modified_files:
+                        parts.append(f"update {len(modified_files)} file(s)")
+                    if deleted_files:
+                        parts.append(f"delete {len(deleted_files)} file(s)")
+                    commit_message = f"{', '.join(parts)}"
+
+                commit_message = f"✨ {commit_message}"
+
+            # 执行 git add
+            add_result = subprocess.run(
+                ['git', 'add', '-A'],
+                capture_output=True,
+                encoding='utf-8',
+                errors='replace',
+                cwd=target_dir
+            )
+
+            if add_result.returncode != 0:
+                return {"success": False, "error": "添加文件到暂存区失败"}
+
+            # 执行 git commit
+            commit_result = subprocess.run(
+                ['git', 'commit', '-m', commit_message],
+                capture_output=True,
+                encoding='utf-8',
+                errors='replace',
+                cwd=target_dir
+            )
+
+            if commit_result.returncode != 0:
+                return {"success": False, "error": f"提交失败: {commit_result.stderr}"}
+
+            # 获取 commit hash
+            hash_result = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'],
+                capture_output=True,
+                encoding='utf-8',
+                errors='replace',
+                text=True,
+                cwd=target_dir
+            )
+            commit_id = hash_result.stdout.strip() if hash_result.returncode == 0 else None
+
+            # 推送到远程仓库
+            push_success = True
+            push_error = None
+            try:
+                # 检查是否有远程仓库
+                remote_result = subprocess.run(
+                    ['git', 'remote'],
+                    capture_output=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    text=True,
+                    cwd=target_dir
+                )
+
+                if remote_result.returncode == 0 and remote_result.stdout.strip():
+                    # 有远程仓库，执行推送
+                    push_result = subprocess.run(
+                        ['git', 'push'],
+                        capture_output=True,
+                        encoding='utf-8',
+                        errors='replace',
+                        text=True,
+                        cwd=target_dir,
+                        timeout=60
+                    )
+
+                    if push_result.returncode != 0:
+                        push_success = False
+                        push_error = push_result.stderr or "推送失败"
+            except subprocess.TimeoutExpired:
+                push_success = False
+                push_error = "推送超时"
+            except Exception as e:
+                push_success = False
+                push_error = str(e)
+
+            return {
+                "success": True,
+                "commit_id": commit_id,
+                "commit_msg": commit_message,
+                "pushed": push_success,
+                "push_error": push_error,
+                "files": {
+                    "added": added_files,
+                    "modified": modified_files,
+                    "deleted": deleted_files,
+                }
+            }
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def create_conversation(
         self, title: str, project_path: Optional[str] = None

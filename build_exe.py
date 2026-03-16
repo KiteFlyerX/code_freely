@@ -19,7 +19,7 @@ PYINSTALLER_SPEC = """
 block_cipher = None
 
 a = Analysis(
-    ['start_simple_gui.py'],
+    ['start_fluent_gui.py'],
     pathex=[],
     binaries=[],
     datas=[
@@ -30,6 +30,11 @@ a = Analysis(
         'PySide6.QtGui',
         'PySide6.QtWidgets',
         'qfluentwidgets',
+        'qfluentwidgets.components',
+        'qfluentwidgets.common',
+        'qfluentwidgets.widgets',
+        'PySide6.QtSvg',
+        'PySide6.QtXml',
         'sqlalchemy',
         'sqlalchemy.dialects',
         'sqlalchemy.dialects.sqlite',

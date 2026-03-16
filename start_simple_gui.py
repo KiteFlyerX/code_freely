@@ -390,9 +390,6 @@ class CodeTraceAIWindow(QMainWindow):
         # 深色模式标志
         self._dark_mode = True
 
-        # 工具自动批准列表
-        self._auto_approve_tools = set()
-
         # 创建中心部件
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -527,145 +524,9 @@ class CodeTraceAIWindow(QMainWindow):
             from src.tools import tool_registry
 
             def permission_handler(tool_name: str, arguments: dict) -> bool:
-                """权限检查处理器"""
-                # 检查是否在自动批准列表中
-                if tool_name in self._auto_approve_tools:
-                    return True
-
-                # 获取工具
-                tool = tool_registry.get(tool_name)
-                if not tool:
-                    return True
-
-                # 检查是否需要确认
-                if not getattr(tool, 'requires_confirmation', False):
-                    return True
-
-                # 构建确认消息
-                if hasattr(tool, 'get_confirmation_message'):
-                    message = tool.get_confirmation_message(**arguments)
-                else:
-                    message = f"确认执行 {tool_name}?"
-
-                # 创建自定义确认对话框
-                from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QCheckBox, QFrame
-                from PySide6.QtGui import QFont
-                from PySide6.QtCore import Qt
-
-                dialog = QDialog(self)
-                dialog.setWindowTitle("确认操作")
-                dialog.setMinimumWidth(450)
-                dialog.setMinimumHeight(200)
-                layout = QVBoxLayout(dialog)
-                layout.setSpacing(16)
-                layout.setContentsMargins(20, 20, 20, 20)
-
-                # 标题图标和消息
-                title_layout = QHBoxLayout()
-
-                # 图标标签
-                icon_label = QLabel("⚠️")
-                icon_label.setStyleSheet("font-size: 32px;")
-                title_layout.addWidget(icon_label)
-
-                # 消息文本
-                msg_label = QLabel(message)
-                msg_label.setWordWrap(True)
-                msg_label.setStyleSheet("""
-                    QLabel {
-                        font-size: 13px;
-                        color: #333333;
-                        line-height: 1.5;
-                    }
-                """)
-                title_layout.addWidget(msg_label, 1)
-                layout.addLayout(title_layout)
-
-                # 分隔线
-                separator = QFrame()
-                separator.setFrameShape(QFrame.HLine)
-                separator.setFrameShadow(QFrame.Sunken)
-                layout.addWidget(separator)
-
-                # 总是允许复选框
-                always_allow_checkbox = QCheckBox("总是允许此工具（本次会话）")
-                always_allow_checkbox.setStyleSheet("""
-                    QCheckBox {
-                        font-size: 12px;
-                        color: #666666;
-                        spacing: 8px;
-                    }
-                    QCheckBox::indicator {
-                        width: 18px;
-                        height: 18px;
-                    }
-                """)
-                layout.addWidget(always_allow_checkbox)
-
-                layout.addStretch()
-
-                # 按钮区域
-                button_layout = QHBoxLayout()
-                button_layout.setSpacing(12)
-
-                yes_btn = QPushButton("允许")
-                yes_btn.setMinimumWidth(100)
-                yes_btn.setMinimumHeight(36)
-                yes_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #1976d2;
-                        color: white;
-                        border: none;
-                        border-radius: 6px;
-                        font-size: 13px;
-                        font-weight: 500;
-                        padding: 8px 16px;
-                    }
-                    QPushButton:hover {
-                        background-color: #1565c0;
-                    }
-                    QPushButton:pressed {
-                        background-color: #0d47a1;
-                    }
-                """)
-
-                no_btn = QPushButton("拒绝")
-                no_btn.setMinimumWidth(100)
-                no_btn.setMinimumHeight(36)
-                no_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #f5f5f5;
-                        color: #333333;
-                        border: 1px solid #e0e0e0;
-                        border-radius: 6px;
-                        font-size: 13px;
-                        font-weight: 500;
-                        padding: 8px 16px;
-                    }
-                    QPushButton:hover {
-                        background-color: #e0e0e0;
-                    }
-                    QPushButton:pressed {
-                        background-color: #d0d0d0;
-                    }
-                """)
-
-                button_layout.addStretch()
-                button_layout.addWidget(no_btn)
-                button_layout.addWidget(yes_btn)
-                layout.addLayout(button_layout)
-
-                yes_btn.clicked.connect(dialog.accept)
-                no_btn.clicked.connect(dialog.reject)
-
-                result = dialog.exec()
-
-                if result == QDialog.Accepted:
-                    # 如果勾选了"总是允许"，添加到自动批准列表
-                    if always_allow_checkbox.isChecked():
-                        self._auto_approve_tools.add(tool_name)
-                    return True
-                return False
+                """权限检查处理器 - 默认允许所有操作"""
+                # 直接返回 True，不需要用户确认
+                return True
 
             # 设置权限处理器
             tool_registry.set_permission_handler(permission_handler)

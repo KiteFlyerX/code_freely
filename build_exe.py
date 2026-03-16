@@ -107,7 +107,7 @@ def create_build_script():
     spec_file = ROOT_DIR / "codetraceai.spec"
 
     print(f"创建 PyInstaller spec 文件: {spec_file}")
-    spec_file.write_text(PYINSTALLER_SPEC)
+    spec_file.write_text(PYINSTALLER_SPEC, encoding='utf-8')
 
     return spec_file
 
@@ -201,7 +201,7 @@ chcp 65001 >nul
 echo CodeTraceAI - AI 编程辅助工具
 echo.
 start "" "CodeTraceAI.exe"
-""")
+""", encoding='utf-8')
 
     # 创建说明文件
     readme = portable_dir / "使用说明.txt"
@@ -227,7 +227,7 @@ start "" "CodeTraceAI.exe"
 
 版本: 0.1.0
 更新日期: 2024
-""")
+""", encoding='utf-8')
 
     # 创建版本信息
     version_file = portable_dir / "version.txt"

@@ -143,6 +143,9 @@ class ChatView(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # 设置 objectName（FluentWindow 要求）
+        self.setObjectName("chatView")
+
         self.conversation_id: Optional[int] = None
         self.current_project_path: Optional[str] = None
         self.work_dir = None  # 当前工作目录
@@ -220,12 +223,12 @@ class ChatView(QWidget):
 
         # 自动提交选项
         options_layout = QHBoxLayout()
-        
+
         self.auto_commit_checkbox = CheckBox("自动提交代码")
         self.auto_commit_checkbox.setChecked(False)
         self.auto_commit_checkbox.setToolTip("勾选后，应用代码修改时会自动提交到 Git 仓库")
         options_layout.addWidget(self.auto_commit_checkbox)
-        
+
         options_layout.addStretch()
         layout.addLayout(options_layout)
 
@@ -533,22 +536,22 @@ class ChatView(QWidget):
     def apply_code_with_auto_commit(self, file_path: str, content: str):
         """
         应用代码修改，并根据设置自动提交
-        
+
         Args:
             file_path: 文件路径
             content: 文件内容
         """
         from pathlib import Path
-        
+
         try:
             # 写入文件
             file_path_obj = Path(file_path)
             file_path_obj.parent.mkdir(parents=True, exist_ok=True)
             file_path_obj.write_text(content, encoding='utf-8')
-            
+
             # 发送代码应用信号
             self.codeApplied.emit({"file_path": file_path})
-            
+
             # 如果勾选了自动提交，则执行 Git 提交
             if self.auto_commit_checkbox.isChecked():
                 self._auto_commit_code(file_path)
@@ -562,7 +565,7 @@ class ChatView(QWidget):
                     duration=3000,
                     parent=self
                 )
-                
+
         except Exception as e:
             InfoBar.error(
                 title="应用代码失败",
@@ -577,17 +580,17 @@ class ChatView(QWidget):
     def _auto_commit_code(self, file_path: str):
         """
         自动提交代码到 Git 仓库
-        
+
         Args:
             file_path: 修改的文件路径
         """
         try:
             # 导入 Git VCS
             from ...vcs import GitVCSFactory
-            
+
             # 获取工作目录
             work_dir = self.work_dir or Path.cwd()
-            
+
             # 检查是否是 Git 仓库
             vcs = GitVCSFactory.create(str(work_dir))
             if not vcs:
@@ -601,13 +604,13 @@ class ChatView(QWidget):
                     parent=self
                 )
                 return
-            
+
             # 生成提交信息
             commit_message = f"AI: 自动提交代码修改 - {Path(file_path).name}"
-            
+
             # 执行提交
             commit_hash = vcs.commit(commit_message, [file_path])
-            
+
             if commit_hash:
                 InfoBar.success(
                     title="代码已自动提交",
@@ -628,7 +631,7 @@ class ChatView(QWidget):
                     duration=3000,
                     parent=self
                 )
-                
+
         except Exception as e:
             InfoBar.error(
                 title="自动提交出错",

@@ -1465,12 +1465,16 @@ class CodeTraceAIWindow(QMainWindow):
             "4. 重启本应用即可自动读取配置"
         )
         ccswitch_info.setWordWrap(True)
+        # 使用更通用的颜色，适应深色和浅色模式
         ccswitch_info.setStyleSheet("""
             QLabel {
-                padding: 12px;
-                background-color: #e3f2fd;
-                border-radius: 6px;
-                font-size: 11px;
+                padding: 16px;
+                background-color: rgba(13, 110, 253, 0.1);
+                color: #0d6efd;
+                border: 1px solid #0d6efd;
+                border-radius: 8px;
+                font-size: 12px;
+                font-weight: 500;
             }
         """)
         config_layout.addWidget(ccswitch_info)
@@ -1480,7 +1484,9 @@ class CodeTraceAIWindow(QMainWindow):
         self.ccswitch_status_label.setStyleSheet("""
             QLabel {
                 padding: 12px;
-                background-color: #f5f5f5;
+                background-color: rgba(0, 0, 0, 0.05);
+                color: #424242;
+                border: 1px solid #e0e0e0;
                 border-radius: 6px;
                 font-size: 12px;
                 font-weight: 500;

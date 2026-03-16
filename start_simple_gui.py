@@ -710,19 +710,28 @@ class CodeTraceAIWindow(QMainWindow):
             self._on_new_chat()
 
     def _check_chat_provider(self):
-        """检查聊天提供商配置"""
+        """检查聊天提供商配置，优先使用 CC-Switch"""
         try:
-            provider = provider_manager.get_active_provider()
+            # 优先从 CC-Switch 获取活跃提供商
+            provider = provider_manager.get_ccswitch_active_provider()
+            is_from_ccswitch = True
+
+            # 如果 CC-Switch 无配置，回退到本地数据库
+            if not provider:
+                provider = provider_manager.get_active_provider()
+                is_from_ccswitch = False
+
             if provider:
                 has_valid_key = bool(provider.api_key and not provider.api_key.startswith("test"))
                 if has_valid_key:
-                    self.chat_status_label.setText(f"活动: {provider.name} ({provider.model})")
+                    ccswitch_tag = " [CC]" if is_from_ccswitch else ""
+                    self.chat_status_label.setText(f"活动: {provider.name} ({provider.model}){ccswitch_tag}")
                     self.chat_status_label.setStyleSheet("color: green; font-size: 11px;")
                 else:
                     self.chat_status_label.setText("API 密钥无效")
                     self.chat_status_label.setStyleSheet("color: orange; font-size: 11px;")
             else:
-                self.chat_status_label.setText("未配置提供商")
+                self.chat_status_label.setText("未配置提供商 (请使用 CC-Switch)")
                 self.chat_status_label.setStyleSheet("color: orange; font-size: 11px;")
         except Exception as e:
             self.chat_status_label.setText(f"配置错误: {e}")
@@ -772,13 +781,20 @@ class CodeTraceAIWindow(QMainWindow):
             return
 
         # 检查提供商
-        provider = provider_manager.get_active_provider()
+        provider = provider_manager.get_ccswitch_active_provider()
         if not provider:
-            self.chat_area.append("\n[错误] 请先在'提供商管理'页面配置 AI 提供商")
+            # 回退到本地数据库
+            provider = provider_manager.get_active_provider()
+
+        if not provider:
+            self.chat_area.append("\n[错误] 请先配置 AI 提供商")
+            self.chat_area.append("\n[提示] 请通过 CC-Switch 配置 AI 提供商和 API 密钥")
+            self.chat_area.append("\n[提示] CC-Switch 下载: https://github.com/farion1231/cc-switch/releases")
             return
 
         if not provider.api_key or provider.api_key.startswith("test"):
             self.chat_area.append(f"\n[错误] 提供商 '{provider.name}' 的 API 密钥无效")
+            self.chat_area.append("\n[提示] 请在 CC-Switch 中配置有效的 API 密钥")
             return
 
         # 确保有对话 ID
@@ -884,7 +900,7 @@ class CodeTraceAIWindow(QMainWindow):
                     if "timeout" in str(data).lower() or "timed out" in str(data).lower():
                         self.chat_area.append(f"\n[错误] 请求超时，请检查网络连接或稍后重试")
                     elif "401" in str(data) or "authentication" in str(data).lower():
-                        self.chat_area.append(f"\n[错误] API 密钥无效，请在'提供商管理'页面更新")
+                        self.chat_area.append(f"\n[错误] API 密钥无效，请在 CC-Switch 中更新")
                     else:
                         self.chat_area.append(f"\n[错误] {str(data)[:300]}")
                     self.chat_input.setEnabled(True)
@@ -1436,7 +1452,28 @@ class CodeTraceAIWindow(QMainWindow):
         config_layout.addWidget(shortcut_hint)
 
         config_layout.addWidget(QLabel("---"))
-        config_layout.addWidget(QLabel("AI 配置"))
+        config_layout.addWidget(QLabel("AI 配置说明"))
+
+        # CC-Switch 配置说明
+        ccswitch_info = QLabel()
+        ccswitch_info.setText(
+            "本应用使用 CC-Switch 管理 AI 提供商配置。\n\n"
+            "配置步骤:\n"
+            "1. 下载并安装 CC-Switch: https://github.com/farion1231/cc-switch/releases\n"
+            "2. 在 CC-Switch 中添加您的 AI 提供商和 API 密钥\n"
+            "3. 启用您想要使用的提供商\n"
+            "4. 重启本应用即可自动读取配置"
+        )
+        ccswitch_info.setWordWrap(True)
+        ccswitch_info.setStyleSheet("""
+            QLabel {
+                padding: 12px;
+                background-color: #e3f2fd;
+                border-radius: 6px;
+                font-size: 11px;
+            }
+        """)
+        config_layout.addWidget(ccswitch_info)
 
         # CC-Switch 状态显示
         self.ccswitch_status_label = QLabel("正在检测 cc-switch...")
@@ -1454,11 +1491,11 @@ class CodeTraceAIWindow(QMainWindow):
         # 当前配置显示
         try:
             cfg = config_service.get_config()
-            config_layout.addWidget(QLabel(f"提供商: {cfg.ai.provider}"))
-            config_layout.addWidget(QLabel(f"模型: {cfg.ai.model}"))
-            config_layout.addWidget(QLabel(f"温度: {cfg.ai.temperature}"))
+            config_layout.addWidget(QLabel(f"默认提供商: {cfg.ai.provider}"))
+            config_layout.addWidget(QLabel(f"默认模型: {cfg.ai.model}"))
+            config_layout.addWidget(QLabel(f"默认温度: {cfg.ai.temperature}"))
         except:
-            config_layout.addWidget(QLabel("无法加载配置"))
+            config_layout.addWidget(QLabel("无法加载默认配置"))
 
         # 刷新 CC-Switch 状态
         self._refresh_ccswitch_status()

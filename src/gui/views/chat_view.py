@@ -289,12 +289,20 @@ class ChatView(QWidget):
         )
 
     def _check_provider_config(self) -> bool:
-        """检查提供商配置"""
+        """检查提供商配置，优先使用 cc-switch 配置"""
         try:
             from ...database import init_database
             init_database()
 
-            provider = provider_manager.get_active_provider()
+            # 优先从 cc-switch 获取活跃提供商，如果失败则从本地数据库读取
+            ccswitch_provider = provider_manager.get_ccswitch_active_provider()
+            provider = ccswitch_provider
+            is_from_ccswitch = True
+
+            if not provider:
+                provider = provider_manager.get_active_provider()
+                is_from_ccswitch = False
+
             if not provider:
                 self.model_label.setText("未配置提供商")
                 self.model_label.setStyleSheet("color: orange;")
@@ -330,8 +338,9 @@ class ChatView(QWidget):
                 return False
 
             # 配置有效 - 更新显示信息
-            # 显示提供商名称和模型
-            self.model_label.setText(f"{provider.name} ({provider.model})")
+            # 显示提供商名称和模型，添加 cc-switch 来源标识
+            ccswitch_tag = " [CC-Switch]" if is_from_ccswitch else ""
+            self.model_label.setText(f"{provider.name} ({provider.model}){ccswitch_tag}")
             self.model_label.setStyleSheet("color: #0078d4; font-weight: bold;")
 
             # 显示代理信息
@@ -348,7 +357,8 @@ class ChatView(QWidget):
                 endpoint_short = endpoint_short[:27] + "..."
 
             # 状态标签显示详细信息
-            status_text = f"提供商: {provider.name} | 模型: {provider.model} | 端点: {endpoint_short}"
+            source_tag = "CC-Switch" if is_from_ccswitch else "本地"
+            status_text = f"[{source_tag}] 提供商: {provider.name} | 模型: {provider.model} | 端点: {endpoint_short}"
             if provider.proxy_enabled:
                 status_text += " | 已启用代理"
             self.status_label.setText(status_text)

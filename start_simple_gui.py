@@ -548,28 +548,111 @@ class CodeTraceAIWindow(QMainWindow):
                     message = f"确认执行 {tool_name}?"
 
                 # 创建自定义确认对话框
-                from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QCheckBox
+                from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QCheckBox, QFrame
+                from PySide6.QtGui import QFont
+                from PySide6.QtCore import Qt
 
                 dialog = QDialog(self)
                 dialog.setWindowTitle("确认操作")
-                dialog.setMinimumWidth(400)
+                dialog.setMinimumWidth(450)
+                dialog.setMinimumHeight(200)
                 layout = QVBoxLayout(dialog)
+                layout.setSpacing(16)
+                layout.setContentsMargins(20, 20, 20, 20)
 
-                # 消息
+                # 标题图标和消息
+                title_layout = QHBoxLayout()
+
+                # 图标标签
+                icon_label = QLabel("⚠️")
+                icon_label.setStyleSheet("font-size: 32px;")
+                title_layout.addWidget(icon_label)
+
+                # 消息文本
                 msg_label = QLabel(message)
                 msg_label.setWordWrap(True)
-                layout.addWidget(msg_label)
+                msg_label.setStyleSheet("""
+                    QLabel {
+                        font-size: 13px;
+                        color: #333333;
+                        line-height: 1.5;
+                    }
+                """)
+                title_layout.addWidget(msg_label, 1)
+                layout.addLayout(title_layout)
+
+                # 分隔线
+                separator = QFrame()
+                separator.setFrameShape(QFrame.HLine)
+                separator.setFrameShadow(QFrame.Sunken)
+                layout.addWidget(separator)
 
                 # 总是允许复选框
                 always_allow_checkbox = QCheckBox("总是允许此工具（本次会话）")
+                always_allow_checkbox.setStyleSheet("""
+                    QCheckBox {
+                        font-size: 12px;
+                        color: #666666;
+                        spacing: 8px;
+                    }
+                    QCheckBox::indicator {
+                        width: 18px;
+                        height: 18px;
+                    }
+                """)
                 layout.addWidget(always_allow_checkbox)
 
-                # 按钮
+                layout.addStretch()
+
+                # 按钮区域
                 button_layout = QHBoxLayout()
+                button_layout.setSpacing(12)
+
                 yes_btn = QPushButton("允许")
+                yes_btn.setMinimumWidth(100)
+                yes_btn.setMinimumHeight(36)
+                yes_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #1976d2;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        font-size: 13px;
+                        font-weight: 500;
+                        padding: 8px 16px;
+                    }
+                    QPushButton:hover {
+                        background-color: #1565c0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #0d47a1;
+                    }
+                """)
+
                 no_btn = QPushButton("拒绝")
-                button_layout.addWidget(yes_btn)
+                no_btn.setMinimumWidth(100)
+                no_btn.setMinimumHeight(36)
+                no_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #f5f5f5;
+                        color: #333333;
+                        border: 1px solid #e0e0e0;
+                        border-radius: 6px;
+                        font-size: 13px;
+                        font-weight: 500;
+                        padding: 8px 16px;
+                    }
+                    QPushButton:hover {
+                        background-color: #e0e0e0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #d0d0d0;
+                    }
+                """)
+
+                button_layout.addStretch()
                 button_layout.addWidget(no_btn)
+                button_layout.addWidget(yes_btn)
                 layout.addLayout(button_layout)
 
                 yes_btn.clicked.connect(dialog.accept)
@@ -1434,6 +1517,15 @@ class CodeTraceAIWindow(QMainWindow):
 
         # CC-Switch 状态显示
         self.ccswitch_status_label = QLabel("正在检测 cc-switch...")
+        self.ccswitch_status_label.setStyleSheet("""
+            QLabel {
+                padding: 12px;
+                background-color: #f5f5f5;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 500;
+            }
+        """)
         config_layout.addWidget(self.ccswitch_status_label)
 
         # 当前配置显示
@@ -1482,7 +1574,16 @@ class CodeTraceAIWindow(QMainWindow):
         """刷新 cc-switch 状态显示"""
         if provider_manager is None:
             self.ccswitch_status_label.setText("❌ 服务未初始化")
-            self.ccswitch_status_label.setStyleSheet("color: red;")
+            self.ccswitch_status_label.setStyleSheet("""
+                QLabel {
+                    padding: 12px;
+                    background-color: #ffebee;
+                    border-radius: 6px;
+                    color: #c62828;
+                    font-size: 12px;
+                    font-weight: 500;
+                }
+            """)
             return
 
         try:
@@ -1490,13 +1591,40 @@ class CodeTraceAIWindow(QMainWindow):
             if provider:
                 status_text = f"✅ CC-Switch: {provider.name} ({provider.model})"
                 self.ccswitch_status_label.setText(status_text)
-                self.ccswitch_status_label.setStyleSheet("color: green;")
+                self.ccswitch_status_label.setStyleSheet("""
+                    QLabel {
+                        padding: 12px;
+                        background-color: #e8f5e9;
+                        border-radius: 6px;
+                        color: #2e7d32;
+                        font-size: 12px;
+                        font-weight: 500;
+                    }
+                """)
             else:
                 self.ccswitch_status_label.setText("⚠️ 未检测到 cc-switch 配置")
-                self.ccswitch_status_label.setStyleSheet("color: orange;")
+                self.ccswitch_status_label.setStyleSheet("""
+                    QLabel {
+                        padding: 12px;
+                        background-color: #fff3e0;
+                        border-radius: 6px;
+                        color: #ef6c00;
+                        font-size: 12px;
+                        font-weight: 500;
+                    }
+                """)
         except Exception as e:
             self.ccswitch_status_label.setText(f"❌ 检测失败: {str(e)}")
-            self.ccswitch_status_label.setStyleSheet("color: red;")
+            self.ccswitch_status_label.setStyleSheet("""
+                QLabel {
+                    padding: 12px;
+                    background-color: #ffebee;
+                    border-radius: 6px;
+                    color: #c62828;
+                    font-size: 12px;
+                    font-weight: 500;
+                }
+            """)
 
     def keyPressEvent(self, event):
         """处理键盘事件"""

@@ -289,17 +289,18 @@ class ChatView(QWidget):
         )
 
     def _check_provider_config(self) -> bool:
-        """检查提供商配置，优先使用 cc-switch 配置"""
+        """检查提供商配置，优先使用 cc-switch 配置并自动同步到本地数据库"""
         try:
             from ...database import init_database
             init_database()
 
-            # 优先从 cc-switch 获取活跃提供商，如果失败则从本地数据库读取
+            # 优先从 cc-switch 获取活跃提供商
             ccswitch_provider = provider_manager.get_ccswitch_active_provider()
             provider = ccswitch_provider
             is_from_ccswitch = True
 
             if not provider:
+                # 如果 cc-switch 不可用，从本地数据库读取
                 provider = provider_manager.get_active_provider()
                 is_from_ccswitch = False
 
@@ -336,6 +337,18 @@ class ChatView(QWidget):
                     parent=self
                 )
                 return False
+
+            # 【关键修复】如果来自 cc-switch，自动同步到本地数据库
+            if is_from_ccswitch:
+                try:
+                    # 更新或添加提供商配置到本地数据库
+                    provider_manager.add_provider(provider)
+                    # 切换为活跃提供商
+                    provider_manager.switch_provider(provider.id)
+                    print(f"✓ 已同步 CC-Switch 配置到本地: {provider.name} ({provider.id})")
+                except Exception as sync_error:
+                    print(f"⚠ 同步 CC-Switch 配置失败: {sync_error}")
+                    # 同步失败不影响继续使用，只是无法持久化
 
             # 配置有效 - 更新显示信息
             # 显示提供商名称和模型，添加 cc-switch 来源标识

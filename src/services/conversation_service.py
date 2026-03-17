@@ -601,19 +601,32 @@ class ConversationService:
 2. 不要反复询问用户意图，直接使用工具探索和修改代码
 3. 先用 Read 工具查看相关文件，然后提出修改方案，最后用 Write 工具修改
 
-**可用工具：**
-- Read: 读取文件内容（先读后写！）
-- Write: 写入文件内容（会覆盖整个文件）
-- Bash: 执行系统命令（git、测试等）
-- Glob: 搜索文件（用模式如 **/*.py）
+**可用工具（必须提供正确的参数）：**
+- Read(file_path: string, limit: int可选, offset: int可选): 读取文件内容
+  - file_path: 文件的完整路径（必需）
+  - limit: 读取的行数限制（可选）
+  - offset: 起始行号（可选，默认1）
+
+- Write(file_path: string, content: string): 写入文件内容（会覆盖整个文件）
+  - file_path: 文件的完整路径（必需）
+  - content: 要写入的完整内容（必需）
+
+- Bash(command: string, timeout: int可选): 执行系统命令
+  - command: 要执行的shell命令（必需）
+  - timeout: 超时时间（可选，默认120秒）
+
+- Glob(pattern: string): 搜索文件
+  - pattern: glob模式，如 **/*.py（必需）
+
+**重要：调用工具时必须提供所有必需参数！**
 
 **工作流程：**
 用户: "默认使用深色模式"
 → 你: "我来帮你修改代码，让程序默认使用深色模式"
-→ 用 Glob 搜索相关文件（如 **/*gui*.py）
-→ 用 Read 查看文件内容
+→ 用 Glob(pattern="**/*gui*.py") 搜索相关文件
+→ 用 Read(file_path="找到的文件路径") 查看文件内容
 → 解释修改方案
-→ 用 Write 写入修改后的代码
+→ 用 Write(file_path="文件路径", content="完整的新内容") 写入修改后的代码
 
 工作目录: {work_dir}
 
@@ -780,19 +793,32 @@ class ConversationService:
 2. 不要反复询问用户意图，直接使用工具探索和修改代码
 3. 先用 Read 工具查看相关文件，然后提出修改方案，最后用 Write 工具修改
 
-**可用工具：**
-- Read: 读取文件内容（先读后写！）
-- Write: 写入文件内容（会覆盖整个文件）
-- Bash: 执行系统命令（git、测试等）
-- Glob: 搜索文件（用模式如 **/*.py）
+**可用工具（必须提供正确的参数）：**
+- Read(file_path: string, limit: int可选, offset: int可选): 读取文件内容
+  - file_path: 文件的完整路径（必需）
+  - limit: 读取的行数限制（可选）
+  - offset: 起始行号（可选，默认1）
+
+- Write(file_path: string, content: string): 写入文件内容（会覆盖整个文件）
+  - file_path: 文件的完整路径（必需）
+  - content: 要写入的完整内容（必需）
+
+- Bash(command: string, timeout: int可选): 执行系统命令
+  - command: 要执行的shell命令（必需）
+  - timeout: 超时时间（可选，默认120秒）
+
+- Glob(pattern: string): 搜索文件
+  - pattern: glob模式，如 **/*.py（必需）
+
+**重要：调用工具时必须提供所有必需参数！**
 
 **工作流程：**
 用户: "默认使用深色模式"
 → 你: "我来帮你修改代码，让程序默认使用深色模式"
-→ 用 Glob 搜索相关文件（如 **/*gui*.py）
-→ 用 Read 查看文件内容
+→ 用 Glob(pattern="**/*gui*.py") 搜索相关文件
+→ 用 Read(file_path="找到的文件路径") 查看文件内容
 → 解释修改方案
-→ 用 Write 写入修改后的代码
+→ 用 Write(file_path="文件路径", content="完整的新内容") 写入修改后的代码
 
 工作目录: {work_dir}
 

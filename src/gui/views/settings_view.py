@@ -229,21 +229,27 @@ class AIConfigView(QWidget):
         grid = QGridLayout()
         grid.setSpacing(12)
 
-        # 提供商
+        # 提供商（可编辑下拉框）
         grid.addWidget(BodyLabel("提供商:"), 0, 0)
         self.provider_combo = ComboBox()
-        self.provider_combo.addItems(["claude", "openai", "deepseek"])
+        self.provider_combo.addItems(["claude", "openai", "deepseek", "ollama", "gemini"])
+        self.provider_combo.setEditable(True)  # 允许手动输入
+        self.provider_combo.setPlaceholderText("选择或输入提供商...")
         self.provider_combo.currentTextChanged.connect(self._on_provider_changed)
         grid.addWidget(self.provider_combo, 0, 1)
 
-        # 模型
+        # 模型（可编辑下拉框）
         grid.addWidget(BodyLabel("模型:"), 1, 0)
         self.model_combo = ComboBox()
         self.model_combo.addItems([
             "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
             "gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo",
-            "deepseek-chat", "deepseek-coder"
+            "deepseek-chat", "deepseek-coder", "deepseek-reasoner",
+            "gemini-pro", "gemini-ultra",
+            "llama-3-70b", "mistral-large", "qwen-72b"
         ])
+        self.model_combo.setEditable(True)  # 允许手动输入
+        self.model_combo.setPlaceholderText("选择或输入模型...")
         grid.addWidget(self.model_combo, 1, 1)
 
         # API 密钥
@@ -269,13 +275,15 @@ class AIConfigView(QWidget):
         self.temperature_spin = ComboBox()
         self.temperature_spin.addItems(["0.0", "0.3", "0.5", "0.7", "1.0"])
         self.temperature_spin.setCurrentText("0.7")
+        self.temperature_spin.setEditable(True)  # 允许手动输入
         grid.addWidget(self.temperature_spin, 3, 1)
 
         # 最大 Tokens
         grid.addWidget(BodyLabel("最大 Tokens:"), 4, 0)
         self.max_tokens_spin = ComboBox()
-        self.max_tokens_spin.addItems(["1024", "2048", "4096", "8192", "16384"])
+        self.max_tokens_spin.addItems(["1024", "2048", "4096", "8192", "16384", "32768", "65536"])
         self.max_tokens_spin.setCurrentText("4096")
+        self.max_tokens_spin.setEditable(True)  # 允许手动输入
         grid.addWidget(self.max_tokens_spin, 4, 1)
 
         layout.addLayout(grid)
@@ -309,17 +317,36 @@ class AIConfigView(QWidget):
 
     def _save_config(self):
         """保存配置"""
+        # 获取值，处理手动输入的情况
+        provider = self.provider_combo.currentText().strip()
+        model = self.model_combo.currentText().strip()
+        api_key = self.api_key_edit.text().strip()
+        temp_text = self.temperature_spin.currentText().strip()
+        max_tokens_text = self.max_tokens_spin.currentText().strip()
+
+        # 验证数值
+        try:
+            temperature = float(temp_text) if temp_text else 0.7
+        except ValueError:
+            temperature = 0.7
+
+        try:
+            max_tokens = int(max_tokens_text) if max_tokens_text else 4096
+        except ValueError:
+            max_tokens = 4096
+
+        # 保存配置
         config_service.update_ai_config(
-            provider=self.provider_combo.currentText(),
-            model=self.model_combo.currentText(),
-            api_key=self.api_key_edit.text(),
-            temperature=float(self.temperature_spin.currentText()),
-            max_tokens=int(self.max_tokens_spin.currentText()),
+            provider=provider,
+            model=model,
+            api_key=api_key,
+            temperature=temperature,
+            max_tokens=max_tokens,
         )
 
         InfoBar.success(
             title="设置已保存",
-            content="AI 配置已更新",
+            content=f"AI 配置已更新\n提供商: {provider}\n模型: {model}",
             orient=Qt.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
@@ -329,16 +356,31 @@ class AIConfigView(QWidget):
 
     def _on_provider_changed(self, provider: str):
         """提供商变化处理"""
-        self.model_combo.clear()
+        # 如果是手动输入的提供商，不更新模型列表
+        if not provider:
+            return
 
-        if provider == "claude":
-            models = ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"]
-        elif provider == "openai":
-            models = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"]
-        else:
-            models = ["deepseek-chat", "deepseek-coder", "deepseek-reasoner"]
+        # 检查是否是预设的提供商
+        preset_providers = {
+            "claude": ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
+            "openai": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
+            "deepseek": ["deepseek-chat", "deepseek-coder", "deepseek-reasoner"],
+            "gemini": ["gemini-pro", "gemini-ultra", "gemini-flash"],
+            "ollama": ["llama-3-70b", "mistral-large", "qwen-72b", "codellama"]
+        }
 
-        self.model_combo.addItems(models)
+        if provider in preset_providers:
+            # 保存当前选中的模型
+            current_model = self.model_combo.currentText()
+            
+            # 清空并重新加载模型列表
+            self.model_combo.clear()
+            self.model_combo.addItems(preset_providers[provider])
+            
+            # 尝试恢复之前选中的模型
+            index = self.model_combo.findText(current_model)
+            if index >= 0:
+                self.model_combo.setCurrentIndex(index)
 
     def _on_toggle_key_visibility(self, checked: bool):
         """切换密钥可见性"""
@@ -351,19 +393,30 @@ class AIConfigView(QWidget):
 
     def _validate_api_key(self):
         """验证 API 密钥"""
-        current_key = self.api_key_edit.text()
-        if current_key:
-            config_service.save_api_key(
-                self.provider_combo.currentText(),
-                current_key
+        current_key = self.api_key_edit.text().strip()
+        provider = self.provider_combo.currentText().strip()
+
+        if not current_key:
+            InfoBar.warning(
+                title="请输入 API 密钥",
+                content="请先输入 API 密钥再进行验证",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self
             )
+            return
+
+        if current_key:
+            config_service.save_api_key(provider, current_key)
 
         is_valid = conversation_service.validate_api_key()
 
         if is_valid:
             InfoBar.success(
                 title="API 密钥有效",
-                content="密钥验证成功",
+                content=f"密钥验证成功\n提供商: {provider}",
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,

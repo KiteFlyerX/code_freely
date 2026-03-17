@@ -284,10 +284,22 @@ class AIConfigView(QWidget):
 
         # 温度
         grid.addWidget(BodyLabel("温度:"), 5, 0)
+        temperature_widget = QWidget()
+        temperature_layout = QVBoxLayout(temperature_widget)
+        temperature_layout.setContentsMargins(0, 0, 0, 0)
+        temperature_layout.setSpacing(4)
+
         self.temperature_edit = LineEdit()
         self.temperature_edit.setPlaceholderText("0.0-1.0，默认 0.7")
         self.temperature_edit.setText("0.7")
-        grid.addWidget(self.temperature_edit, 5, 1)
+        temperature_layout.addWidget(self.temperature_edit)
+
+        # 温度说明
+        temp_help = BodyLabel("💡 值越高输出越随机创新（0.8-1.0），值越低输出越确定精确（0.0-0.3）")
+        temp_help.setStyleSheet("color: gray; font-size: 11px;")
+        temperature_layout.addWidget(temp_help)
+
+        grid.addWidget(temperature_widget, 5, 1)
 
         # 最大 Tokens
         grid.addWidget(BodyLabel("最大 Tokens:"), 6, 0)

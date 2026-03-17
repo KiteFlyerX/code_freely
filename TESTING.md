@@ -1,799 +1,347 @@
 # CodeTraceAI 测试指南
 
-本文档提供了完整的测试指南，包括环境准备、依赖安装、功能测试和故障排查。
+## 📋 测试概览
 
-## 目录
+本项目提供了多种测试方式，从简单的导入测试到完整的集成测试。
 
-1. [环境准备](#环境准备)
-2. [依赖安装](#依赖安装)
-3. [单元测试](#单元测试)
-4. [集成测试](#集成测试)
-5. [提供商管理测试](#提供商管理测试)
-6. [CC-Switch 集成测试](#cc-switch-集成测试)
-7. [GUI 功能测试](#gui-功能测试)
-8. [自动提交功能测试](#自动提交功能测试)
-9. [打包测试](#打包测试)
-10. [故障排查](#故障排查)
+## 🚀 快速开始
 
----
-
-## 环境准备
-
-### 系统要求
-
-- **Python**: 3.9 或更高版本
-- **操作系统**: Windows 10/11、macOS、Linux
-- **Git**: 用于版本控制集成
-- **CC-Switch** (可选): 用于导入 AI 提供商配置
-
-### 检查 Python 版本
+### 1. 安装测试依赖
 
 ```bash
-python --version
-# 或
-python3 --version
-```
-
-### 检查 Git
-
-```bash
-git --version
-```
-
----
-
-## 依赖安装
-
-### 完整安装（含 GUI）
-
-```bash
-# 安装所有依赖
 pip install -r requirements.txt
 ```
 
-### 核心依赖（仅 CLI）
+### 2. 运行所有测试
 
 ```bash
-pip install sqlalchemy anthropic openai gitpython click rich aiohttp
-```
-
-### GUI 依赖
-
-```bash
-pip install PySide6 PyQt-Fluent-Widgets
-```
-
-### 验证安装
-
-```bash
-# 检查关键包
-python -c "import sqlalchemy; print('SQLAlchemy OK')"
-python -c "import anthropic; print('Anthropic OK')"
-python -c "import openai; print('OpenAI OK')"
-python -c "import PySide6; print('PySide6 OK')"
-```
-
----
-
-## 单元测试
-
-### 运行核心测试
-
-```bash
-# 进入项目目录
-cd CodeTraceAI
-
 # 运行核心测试
+python tests/test_core.py
+
+# 运行集成测试（推荐）
+python tests/test_integration.py
+```
+
+## 📁 测试文件说明
+
+### 核心测试 (`tests/test_core.py`)
+
+快速验证项目的核心功能模块是否正常工作。
+
+**测试内容：**
+- ✅ 配置服务 (Config Service)
+- ✅ 数据库连接 (Database)
+- ✅ 版本控制 (VCS - Git)
+- ✅ AI 接口 (AI Interface)
+
+**运行方式：**
+```bash
 python tests/test_core.py
 ```
 
-**预期输出**:
-
+**预期输出：**
 ```
 Running CodeTraceAI tests...
 
 --- Config Service ---
 AI Provider: claude
-AI Model: claude-sonnet-4-6
+AI Model: claude-3-5-sonnet-20241022
 Config service: OK
 
 --- Database ---
 Database initialized
-Found 0 config entries
+Found X config entries
 Database: OK
 
 --- VCS ---
-Git repository detected, current branch: master
+Git repository detected, current branch: main
 VCS: OK
 
 --- AI Interface ---
-ClaudeAI supported models: ['claude-opus-4-6', 'claude-sonnet-4-6', ...]
+ClaudeAI supported models: ['claude-3-5-sonnet-20241022', ...]
 AI interface: OK
 
 --- All tests completed ---
 ```
 
-### 运行提供商服务测试
-
-```bash
-python test_provider_full.py
-```
-
 ---
 
-## 集成测试
+### 集成测试 (`tests/test_integration.py`)
 
-### 运行集成测试
+完整的集成测试套件，测试所有服务和它们之间的协作。
 
+**测试内容：**
+- 🔹 数据库模块（初始化、会话）
+- 🔹 AI 接口（Claude、OpenAI、DeepSeek）
+- 🔹 版本控制（Git 检测、状态检查）
+- 🔹 配置服务（加载、更新）
+- 🔹 对话服务（创建、列表、消息）
+- 🔹 Bug 追踪服务（创建、状态更新、搜索）
+- 🔹 代码审查服务（创建、提交、合并检查）
+- 🔹 知识库服务（创建、搜索、统计）
+- 🔹 服务集成（Bug 提取知识、访问计数）
+
+**运行方式：**
 ```bash
 python tests/test_integration.py
 ```
 
-**预期输出**:
-
+**预期输出：**
 ```
 ==================================================
 CodeTraceAI 集成测试
 ==================================================
 
-📊 测试数据库模块...
-  ✅ 数据库初始化
-  ✅ 数据库会话
+[Database] 测试数据库模块...
+  [PASS] 数据库初始化
+  [PASS] 数据库会话
 
-🤖 测试 AI 接口模块...
-  ✅ Claude AI 模型列表 (5 个)
-  ✅ OpenAI 模型列表 (4 个)
-  ✅ DeepSeek 模型列表 (3 个)
+[AI] 测试 AI 接口模块...
+  [PASS] Claude AI 模型列表 (X 个)
+  [PASS] OpenAI 模型列表 (X 个)
+  [PASS] DeepSeek 模型列表 (X 个)
 
-🔀 测试版本控制模块...
-  ✅ Git 检测成功 (分支: master)
-  ✅ Git 状态检查
-  ✅ Git 文件变更检查
+[VCS] 测试版本控制模块...
+  [PASS] Git 检测成功 (分支: main)
+  [PASS] Git 状态检查
+  [PASS] Git 文件变更检查 (X 个文件)
 
-⚙️ 测试配置服务...
-  ✅ 配置加载
-  ✅ AI 配置结构
-  ✅ 配置更新
-
-💬 测试对话服务...
-  ✅ 创建对话
-  ✅ 对话列表
-  ✅ 获取消息
-
-🐛 测试 Bug 追踪服务...
-  ✅ 创建 Bug
-  ✅ 获取 Bug 详情
-  ✅ Bug 列表
-  ✅ Bug 状态更新
-  ✅ Bug 搜索
-
-👁️ 测试代码审查服务...
-  ✅ 创建审查
-  ✅ 提交审查
-  ✅ 审查摘要
-  ✅ 合并检查
-
-📚 测试知识库服务...
-  ✅ 创建知识条目
-  ✅ 获取知识条目
-  ✅ 知识搜索
-  ✅ 知识统计
-  ✅ 分类获取
-  ✅ 相似条目查找
+...
 
 ==================================================
-测试结果: 28/28 通过
+测试结果: XX/XX 通过
 ==================================================
 ```
 
 ---
 
-## 提供商管理测试
+### 自动提交测试 (`test_auto_commit.py`)
 
-### 1. 添加提供商测试
+测试 Git 自动提交功能。
 
-```python
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+**测试内容：**
+- ✅ 检查自动提交配置
+- ✅ Git 仓库检测
+- ✅ 未提交更改检查
+- ✅ 创建代码修改记录
+- ✅ 模拟自动提交
+- ✅ 验证提交结果
+- ✅ 临时分支功能
 
-from src.services import ProviderConfig, ProviderType, provider_manager
-
-# 创建 Claude 配置
-claude_config = ProviderConfig(
-    id="test_claude",
-    name="测试 Claude",
-    provider_type=ProviderType.CLAUDE,
-    api_key="sk-ant-test-key",
-    model="claude-sonnet-4-6",
-    temperature=0.7,
-    max_tokens=4096,
-)
-
-# 添加提供商
-provider_manager.add_provider(claude_config)
-print("✅ Claude 提供商已添加")
-
-# 创建 OpenAI 配置
-openai_config = ProviderConfig(
-    id="test_openai",
-    name="测试 OpenAI",
-    provider_type=ProviderType.OPENAI,
-    api_key="sk-test-key",
-    model="gpt-4o",
-    temperature=0.7,
-    max_tokens=4096,
-)
-
-provider_manager.add_provider(openai_config)
-print("✅ OpenAI 提供商已添加")
+**运行方式：**
+```bash
+python test_auto_commit.py
 ```
 
-### 2. 列出提供商测试
-
-```python
-# 列出所有提供商
-providers = provider_manager.get_providers()
-print(f"\n📋 提供商列表 ({len(providers)} 个):")
-for p in providers:
-    active = " [活动]" if p.is_active else ""
-    print(f"  - {p.name} ({p.id}){active}")
-```
-
-### 3. 切换提供商测试
-
-```python
-# 切换到 Claude
-if provider_manager.switch_provider("test_claude"):
-    print("\n✅ 已切换到 Claude 提供商")
-
-# 获取当前活动提供商
-active = provider_manager.get_active_provider()
-print(f"当前活动提供商: {active.name}")
-```
-
-### 4. 编辑/删除提供商测试
-
-```python
-# 编辑提供商
-updated_config = ProviderConfig(
-    id="test_claude",
-    name="测试 Claude (已更新)",
-    provider_type=ProviderType.CLAUDE,
-    api_key="sk-ant-new-key",
-    model="claude-opus-4-6",
-)
-provider_manager.update_provider("test_claude", updated_config)
-print("✅ 提供商已更新")
-
-# 删除提供商
-if provider_manager.delete_provider("test_openai"):
-    print("✅ OpenAI 提供商已删除")
-```
-
-### 5. 导入预设测试
-
-```python
-from src.services import PROVIDER_PRESETS
-
-# 列出所有预设
-print("\n📦 可用预设:")
-for preset in PROVIDER_PRESETS:
-    print(f"  - {preset.name} ({preset.id}) [{preset.category}]")
-
-# 从预设添加
-claude_preset = next(p for p in PROVIDER_PRESETS if p.id == "claude-default")
-config = ProviderConfig(
-    id=claude_preset.id,
-    name=claude_preset.name,
-    provider_type=claude_preset.config.provider_type,
-    api_key="your-api-key-here",
-    model=claude_preset.config.model,
-)
-provider_manager.add_provider(config)
-print("✅ 已从预设添加 Claude 配置")
-```
+**注意事项：**
+- ⚠️ 此测试会实际执行 Git 提交操作
+- ⚠️ 建议在测试分支上运行
+- ⚠️ 确保已配置 Git 用户信息
 
 ---
 
-## CC-Switch 集成测试
+### 导入测试 (`test_import.py`)
 
-### 1. 检测 CC-Switch 安装
+测试所有模块是否能正常导入（用于检查依赖和导入路径）。
 
-```python
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+**测试内容：**
+- ✅ 核心模块导入（ai、database、models、services、vcs）
+- ✅ GUI 模块导入和窗口创建
 
-from src.services import provider_manager
-import os
-
-# 检测 CC-Switch 数据库路径
-ccswitch_paths = [
-    Path.home() / ".cc-switch" / "cc-switch.db",
-    Path(os.environ.get("APPDATA", "")) / "cc-switch" / "cc-switch.db",
-    Path(os.environ.get("LOCALAPPDATA", "")) / "cc-switch" / "cc-switch.db",
-]
-
-print("🔍 检测 CC-Switch 安装:")
-for path in ccswitch_paths:
-    if path.exists():
-        print(f"  ✅ 找到: {path}")
-    else:
-        print(f"  ❌ 未找到: {path}")
+**运行方式：**
+```bash
+python test_import.py
 ```
 
-### 2. 从 CC-Switch 导入配置
-
-```python
-# 导入所有提供商
-count = provider_manager.import_from_ccswitch()
-print(f"\n📥 从 CC-Switch 导入了 {count} 个提供商配置")
-
-# 列出导入的提供商
-providers = provider_manager.get_providers()
-print("\n当前提供商列表:")
-for p in providers:
-    if p.id.startswith("ccswitch_"):
-        print(f"  - {p.name} ({p.id})")
-```
-
-### 3. 使用 CC-Switch 活跃提供商
-
-```python
-# 获取 CC-Switch 的活跃提供商
-provider = provider_manager.get_ccswitch_active_provider()
-
-if provider:
-    print(f"\n✅ CC-Switch 活跃提供商: {provider.name}")
-    print(f"   模型: {provider.model}")
-    print(f"   端点: {provider.api_endpoint}")
-else:
-    print("\n⚠️ 未检测到 CC-Switch 配置")
-```
+**注意事项：**
+- 🖥️ 会打开 GUI 窗口
+- 🖥️ 需要图形界面环境
 
 ---
 
-## GUI 功能测试
+### 其他测试文件
 
-### 启动 GUI
+- `test_minimal_gui.py` - 最小化 GUI 测试
+- `test_provider_full.py` - AI 提供者完整测试
+- `test_provider_service.py` - AI 服务测试
+- `test_auto_commit_demo.py` - 自动提交演示
 
-```bash
-python start_simple_gui.py
-```
+## 🧪 使用 pytest 运行测试（可选）
 
-### GUI 测试清单
-
-#### 1. 聊天页面测试
-
-- [ ] 页面正常加载
-- [ ] 项目选择器显示当前目录
-- [ ] CC-Switch 状态显示正确
-- [ ] 模型标签显示 `[CC-Switch]` 标识
-- [ ] 输入框可以输入文字
-- [ ] 发送按钮正常工作
-- [ ] AI 响应正常显示
-- [ ] 新建对话按钮功能正常
-- [ ] 自动提交复选框可用
-
-#### 2. 设置页面测试
-
-##### 提供商管理
-
-- [ ] 提供商列表正常显示
-- [ ] "从预设导入"按钮可用
-- [ ] "手动添加"按钮可用
-- [ ] "导出配置"按钮可用
-- [ ] 选择提供商显示详情
-- [ ] "设为活动"按钮功能正常
-- [ ] "编辑"按钮功能正常
-- [ ] "删除"按钮功能正常
-
-##### AI 快速配置
-
-- [ ] 提供商下拉框包含所有选项
-- [ ] 切换提供商更新模型列表
-- [ ] API 密钥输入框可用
-- [ ] "显示"按钮切换密钥可见性
-- [ ] "验证 API 密钥"按钮正常工作
-- [ ] 保存设置成功
-
-#### 3. 历史记录页面测试
-
-- [ ] 页面正常加载
-- [ ] 表格显示代码修改历史
-- [ ] 搜索框可以过滤结果
-- [ ] 项目筛选器正常工作
-- [ ] 刷新按钮更新数据
-
-#### 4. Bug 追踪页面测试
-
-- [ ] 页面正常加载
-- [ ] Bug 列表正常显示
-- [ ] 状态筛选器正常工作
-- [ ] 新建 Bug 对话框打开
-- [ ] 创建 Bug 成功
-- [ ] 标记修复按钮功能正常
-
-#### 5. 代码审查页面测试
-
-- [ ] 页面正常加载
-- [ ] 审查列表正常显示
-- [ ] 新建审查功能正常
-- [ ] 提交审查对话框打开
-- [ ] 审查提交成功
-
-#### 6. 知识库页面测试
-
-- [ ] 页面正常加载
-- [ ] 浏览标签页显示条目
-- [ ] 搜索功能正常工作
-- [ ] 统计标签页显示数据
-- [ ] 新建条目功能正常
-
----
-
-## 自动提交功能测试
-
-### 1. 测试自动提交对话框
+如果你想使用 pytest 框架：
 
 ```bash
-# 启动 GUI
-python start_simple_gui.py
+# 安装 pytest
+pip install pytest pytest-cov
 
-# 测试步骤:
-# 1. 进入聊天页面
-# 2. 勾选"自动提交代码"
-# 3. 发送代码修改请求
-# 4. 应用代码时检查是否自动提交
+# 运行所有测试
+pytest tests/ -v
+
+# 运行特定测试文件
+pytest tests/test_core.py -v
+
+# 生成覆盖率报告
+pytest tests/ --cov=src --cov-report=html
 ```
 
-### 2. 测试提交消息生成
+## 🔧 测试前准备
 
-```python
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+### 1. 配置 AI API Keys
 
-from src.services import conversation_service
+在 `config/config.yaml` 中配置你的 AI API keys：
 
-# 测试提交消息生成
-changes = """
-Modified Files:
-  - src/gui/views/chat_view.py: 优先使用 CC-Switch 配置
-  - src/services/provider_service.py: 添加 CC-Switch 集成
-
-Changes:
-  + 实现了 CC-Switch 配置优先读取
-  + 添加了配置来源显示标识
-"""
-
-# 使用 AI 生成提交消息
-message = conversation_service.generate_commit_message(changes)
-print(f"生成的提交消息:\n{message}")
+```yaml
+ai:
+  provider: claude  # 或 openai、deepseek
+  model: claude-3-5-sonnet-20241022
+  api_key: your-api-key-here
 ```
 
-### 3. 测试完整自动提交流程
-
-```python
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
-
-from src.services import conversation_service
-
-# 创建测试对话
-conv_id = conversation_service.create_conversation("自动提交测试")
-
-# 模拟代码修改
-test_file = "test_auto_demo.py"
-test_content = """
-# 测试文件
-def hello():
-    print("Hello, World!")
-"""
-
-# 执行自动提交
-result = conversation_service.auto_commit_changes(
-    conversation_id=conv_id,
-    files={test_file: test_content},
-    auto_commit=True,
-    push_to_remote=True,
-)
-
-if result.get("success"):
-    print(f"✅ 自动提交成功")
-    print(f"   提交 ID: {result.get('commit_id')}")
-    print(f"   提交消息: {result.get('commit_msg')}")
-    print(f"   已推送: {result.get('pushed')}")
-else:
-    print(f"❌ 自动提交失败: {result.get('error')}")
-```
-
----
-
-## 打包测试
-
-### 1. 运行打包脚本
+或在环境变量中设置：
 
 ```bash
-python build_exe.py
+export ANTHROPIC_API_KEY="your-key"
+export OPENAI_API_KEY="your-key"
+export DEEPSEEK_API_KEY="your-key"
 ```
 
-### 2. 验证打包结果
+### 2. 初始化数据库
 
 ```bash
-# 检查生成的文件
-ls -lh dist/
-
-# 检查绿色版目录
-ls -lh dist/CodeTraceAI_Portable/
-
-# 运行打包后的程序
-./dist/CodeTraceAI_Portable/CodeTraceAI.exe
-```
-
-### 3. 测试绿色版功能
-
-- [ ] exe 文件能正常启动
-- [ ] 数据目录自动创建
-- [ ] 日志目录自动创建
-- [ ] 启动脚本工作正常
-- [ ] 所有功能正常使用
-
----
-
-## 故障排查
-
-### 常见问题
-
-#### 1. ImportError: No module named 'xxx'
-
-**问题**: 缺少依赖包
-
-**解决**:
-```bash
-pip install xxx
-# 或重新安装所有依赖
-pip install -r requirements.txt
-```
-
-#### 2. CC-Switch 检测失败
-
-**问题**: 未找到 CC-Switch 配置文件
-
-**解决**:
-```bash
-# 检查 CC-Switch 是否已安装
-# Windows: 检查 %APPDATA%\cc-switch\ 或 %LOCALAPPDATA%\cc-switch\
-# Linux/Mac: 检查 ~/.cc-switch/
-
-# 如果使用的是其他路径，手动导入配置
-```
-
-#### 3. 提供商切换失败
-
-**问题**: 无法切换提供商
-
-**解决**:
-```python
-# 检查提供商是否存在
-providers = provider_manager.get_providers()
-for p in providers:
-    print(f"{p.id}: {p.name}")
-
-# 确保使用正确的提供商 ID
-```
-
-#### 4. API 密钥验证失败
-
-**问题**: API 密钥未设置或无效
-
-**解决**:
-```bash
-# 在 GUI 中设置 API 密钥
-# 或通过代码设置
-from src.services import ProviderConfig
-config.api_key = "your-api-key"
-provider_manager.update_provider(config.id, config)
-```
-
-#### 5. 数据库错误
-
-**问题**: 数据库初始化失败
-
-**解决**:
-```bash
-# 删除旧数据库
-rm -rf ~/.codetrace/
-
-# 重新初始化
 python -c "from src.database import init_database; init_database()"
 ```
 
-#### 6. GUI 启动失败
+### 3. 检查 Git 仓库
 
-**问题**: GUI 依赖未安装
+确保当前目录是 Git 仓库：
 
-**解决**:
 ```bash
-pip install PySide6 PyQt-Fluent-Widgets
+git status
 ```
 
-#### 7. Git 检测失败
+## 📊 测试最佳实践
 
-**问题**: 当前目录不是 Git 仓库
+### 1. 运行测试的顺序
 
-**解决**:
 ```bash
-# 初始化 Git 仓库
-git init
-git add .
-git commit -m "Initial commit"
+# 1. 先运行导入测试（检查基础依赖）
+python test_import.py
+
+# 2. 然后运行核心测试（检查核心功能）
+python tests/test_core.py
+
+# 3. 最后运行集成测试（检查完整流程）
+python tests/test_integration.py
 ```
 
-#### 8. 自动提交失败
+### 2. 持续测试
 
-**问题**: Git 提交或推送失败
+在开发过程中，建议：
 
-**解决**:
+- 每次修改代码后运行相关测试
+- 提交代码前运行完整测试套件
+- 定期检查测试覆盖率
+
+### 3. 调试测试
+
+如果测试失败：
+
+```bash
+# 运行单个测试函数
+python tests/test_core.py
+# 在代码中添加断点或 print 语句调试
+
+# 使用 pytest 的详细输出
+pytest tests/test_core.py -v -s
+```
+
+## 🐛 常见问题
+
+### Q1: 测试时报错 "ModuleNotFoundError"
+
+**解决方案：**
+```bash
+# 确保在项目根目录运行
+cd E:\workspaces\python\CodeTraceAI
+
+# 检查 Python 路径
+python -c "import sys; print(sys.path)"
+```
+
+### Q2: 数据库测试失败
+
+**解决方案：**
+```bash
+# 删除现有数据库重新初始化
+rm -f data/codetrace.db
+python -c "from src.database import init_database; init_database()"
+```
+
+### Q3: Git 测试失败
+
+**解决方案：**
 ```bash
 # 检查 Git 配置
 git config user.name
 git config user.email
 
-# 设置 Git 配置
+# 如果没有配置，设置一下
 git config user.name "Your Name"
 git config user.email "your.email@example.com"
-
-# 检查远程仓库
-git remote -v
 ```
 
-### 调试模式
+### Q4: AI 接口测试失败
 
-启用详细日志:
+**解决方案：**
+- 检查 API key 是否正确配置
+- 检查网络连接
+- 某些测试只是验证模型列表，不需要实际调用 API
 
-```python
-import logging
-logging.basicConfig(level=logging.DEBUG)
+## 📈 查看测试结果
+
+### 成功的测试
+
+测试成功时会看到：
+```
+[PASS] 测试项名称
+[OK] 所有测试通过!
 ```
 
-或设置环境变量:
+### 失败的测试
 
-```bash
-export CODETRACE_DEBUG=1
+测试失败时会看到：
+```
+[FAIL] 测试项名称: 错误详情
 ```
 
----
+并会打印完整的错误堆栈。
 
-## 发布前检查清单
+## 🎯 下一步
 
-### 功能测试
+测试通过后，你可以：
 
-- [ ] 所有单元测试通过
-- [ ] 所有集成测试通过
-- [ ] CLI 命令正常工作
-- [ ] GUI 界面正常加载
-- [ ] 提供商管理功能正常
-- [ ] CC-Switch 集成正常工作
-- [ ] 自动提交功能正常
+1. **运行应用程序**
+   ```bash
+   # CLI 模式
+   python -m codetrace.cli ask "编写一个排序函数"
 
-### AI 测试
+   # GUI 模式
+   python -m codetrace.gui
+   ```
 
-- [ ] Claude 模型可用
-- [ ] OpenAI 模型可用
-- [ ] DeepSeek 模型可用
-- [ ] 自定义端点可用
+2. **查看项目文档**
+   - README.md - 项目概览
+   - docs/ - 详细文档
 
-### 数据库测试
+3. **开始开发**
+   - 查看 `src/` 目录下的源代码
+   - 根据需求添加新功能
 
-- [ ] 数据库初始化正常
-- [ ] 数据库读写正常
-- [ ] 数据库迁移正常
+## 📝 总结
 
-### 版本控制测试
+- 🚀 **快速测试**: `python tests/test_integration.py`
+- 🔍 **单项测试**: 运行特定测试文件
+- 🐛 **调试**: 使用 `-v` 参数查看详细输出
+- ✅ **最佳实践**: 定期运行测试，确保代码质量
 
-- [ ] Git 检测正常
-- [ ] Git 提交正常
-- [ ] Git 推送正常
-- [ ] 分支操作正常
-
-### 打包测试
-
-- [ ] 打包脚本运行成功
-- [ ] exe 文件能正常启动
-- [ ] 绿色版功能完整
-- [ ] 安装包大小合理
-
-### 文档测试
-
-- [ ] README.md 完整准确
-- [ ] TESTING.md 完整准确
-- [ ] CHANGELOG.md 更新
-- [ ] BUILD.md 完整准确
-
-### 性能测试
-
-- [ ] 启动时间 < 3 秒
-- [ ] AI 响应时间合理
-- [ ] 数据库查询 < 100ms
-- [ ] 内存占用合理
-
-### 安全测试
-
-- [ ] API 密钥安全存储
-- [ ] 无硬编码敏感信息
-- [ ] 无 SQL 注入风险
-- [ ] 无 XSS 风险
-
----
-
-## 获取帮助
-
-- 查看 README.md 获取基本信息
-- 查看 CHANGELOG.md 了解新增功能
-- 查看 BUILD.md 了解打包说明
-- 查看 docs/PROVIDER_MANAGEMENT.md 了解提供商管理
-- 运行 `codetrace --help` 查看命令帮助
-- 提交 Issue: https://codeup.aliyun.com/639060c273a727212a3e3fe2/python/CodeTraceAI/issues
-
----
-
-## 附录
-
-### 测试数据示例
-
-#### 测试提供商配置
-
-```python
-test_providers = [
-    {
-        "id": "test_claude",
-        "name": "测试 Claude",
-        "type": "claude",
-        "model": "claude-sonnet-4-6",
-        "api_key": "sk-ant-test",
-    },
-    {
-        "id": "test_openai",
-        "name": "测试 OpenAI",
-        "type": "openai",
-        "model": "gpt-4o",
-        "api_key": "sk-test",
-    },
-    {
-        "id": "test_deepseek",
-        "name": "测试 DeepSeek",
-        "type": "deepseek",
-        "model": "deepseek-chat",
-        "api_key": "sk-test",
-    },
-]
-```
-
-#### 测试对话内容
-
-```
-用户: 帮我写一个快速排序函数
-AI: 好的，这是快速排序的 Python 实现...
-
-用户: 能给代码添加注释吗？
-AI: 当然，这是添加了注释的版本...
-```
-
-#### 测试 Bug 数据
-
-```python
-test_bug = {
-    "title": "登录页面响应慢",
-    "description": "用户登录时页面加载超过 5 秒",
-    "severity": "high",
-    "priority": 1,
-}
-```
-
----
-
-**文档版本**: 0.2.0
-**最后更新**: 2026-03-16
+祝测试顺利！🎉

@@ -144,6 +144,18 @@ class ChatWidget(QWidget):
 
         toolbar_layout.addSpacing(10)
 
+        # 版本号显示
+        try:
+            current_version = config_service.get_config().app_version
+            self.version_label = BodyLabel(f"v{current_version}")
+            self.version_label.setStyleSheet("color: #888; font-size: 11px;")
+            self.version_label.setToolTip("当前版本")
+            toolbar_layout.addWidget(self.version_label)
+        except:
+            pass
+
+        toolbar_layout.addSpacing(10)
+
         # 新建对话按钮
         new_chat_btn = PrimaryPushButton("新建对话")
         new_chat_btn.clicked.connect(self._on_new_chat)
@@ -449,6 +461,15 @@ class ChatWidget(QWidget):
             else:
                 self.token_stats_label.setText(f"Tokens: - | 总计: {total_tokens_all:,} | 上下文: {max_context}")
                 self.token_stats_label.setStyleSheet("color: #888; font-size: 11px;")
+
+            # 更新版本号显示
+            if hasattr(self, 'version_label'):
+                try:
+                    current_version = config_service.get_config().app_version
+                    self.version_label.setText(f"v{current_version}")
+                except:
+                    pass
+
         except Exception as e:
             print(f"Token stats error: {e}")
 

@@ -708,10 +708,13 @@ class ConversationService:
                 commit_result = self.commit_changes(commit_message=commit_msg, force=True)
 
                 if commit_result.get("success"):
-                    # 提交成功，输出提示信息
+                    # 提交成功，增加版本号
+                    new_version = config_service.increment_version()
+                    # 输出提示信息
                     yield f"\n\n✅ 已自动提交: {commit_msg}"
                     if commit_result.get("commit_id"):
                         yield f" ({commit_result['commit_id'][:8]})"
+                    yield f" - 版本: {new_version}"
                     if commit_result.get("pushed"):
                         yield f" 并已推送到远程仓库"
                 elif "没有需要提交的更改" not in commit_result.get("error", ""):

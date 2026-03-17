@@ -43,6 +43,7 @@ class AppConfig:
     create_temp_branch: bool = True
     theme: str = "dark"  # light, dark, auto
     last_conversation_id: Optional[int] = None  # 上次的对话 ID
+    app_version: str = "1.0.0"  # 应用版本号
 
     def __post_init__(self):
         if self.ai is None:
@@ -57,6 +58,7 @@ class AppConfig:
             "create_temp_branch": self.create_temp_branch,
             "theme": self.theme,
             "last_conversation_id": self.last_conversation_id,
+            "app_version": self.app_version,
         }
 
     @classmethod
@@ -70,6 +72,7 @@ class AppConfig:
             create_temp_branch=data.get("create_temp_branch", True),
             theme=data.get("theme", "dark"),
             last_conversation_id=data.get("last_conversation_id"),
+            app_version=data.get("app_version", "1.0.0"),
         )
 
 
@@ -172,6 +175,24 @@ class ConfigService:
         if config.ai.provider == provider:
             config.ai.api_key = api_key
             self.save_config()
+
+    def increment_version(self) -> str:
+        """增加版本号（递增修订版本号）"""
+        config = self.get_config()
+        try:
+            parts = config.app_version.split(".")
+            if len(parts) == 3:
+                major, minor, patch = parts
+                patch = str(int(patch) + 1)
+                config.app_version = f"{major}.{minor}.{patch}"
+            else:
+                config.app_version = "1.0.1"
+            self.save_config()
+            return config.app_version
+        except:
+            config.app_version = "1.0.1"
+            self.save_config()
+            return config.app_version
 
 
 # 全局配置服务实例

@@ -19,10 +19,12 @@ from qfluentwidgets import (
 
 import os
 import json
+import asyncio
 
 from ...services import config_service, provider_manager
 from ...services.provider_service import ProviderConfig, ProviderType
 from ...services.ai_client_factory import create_ai_client
+from ...ai.base import Message, MessageRole, AIRequestConfig
 
 
 class SettingsView(QWidget):
@@ -404,6 +406,38 @@ class SettingsView(QWidget):
         }
         return provider_map.get(provider.lower(), ProviderType.CUSTOM)
     
+    async def _async_validate_api_key(self, client) -> tuple[bool, str]:
+        """异步验证 API 密钥"""
+        try:
+            # 构建测试消息
+            messages = [
+                Message(role=MessageRole.USER, content="Hello")
+            ]
+            
+            # 构建请求配置
+            config = AIRequestConfig(
+                max_tokens=10,
+                temperature=0.5
+            )
+            
+            # 发送聊天请求
+            response = await client.chat(messages, config)
+            
+            if response and response.content:
+                return True, "API 密钥验证成功"
+            else:
+                return False, "API 返回空响应"
+                
+        except Exception as e:
+            error_msg = str(e)
+            # 提取关键错误信息
+            if "AuthenticationError" in error_msg or "401" in error_msg:
+                return False, "API 密钥无效"
+            elif "Connection" in error_msg or "Timeout" in error_msg:
+                return False, "网络连接失败"
+            else:
+                return False, f"验证失败: {error_msg}"
+    
     def _validate_api_key(self):
         """验证 API 密钥"""
         api_key = self.api_key_input.text().strip()
@@ -451,39 +485,33 @@ class SettingsView(QWidget):
             # 使用工厂创建客户端
             client = create_ai_client(config)
             
-            # 尝试发送测试请求
+            # 运行异步验证
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
             try:
-                response = client.send_message("Hello", [])
+                is_valid, message = loop.run_until_complete(self._async_validate_api_key(client))
                 
-                if response and response.get("success"):
-                    self.validation_result.setText("✅ API 密钥验证成功")
+                if is_valid:
+                    self.validation_result.setText("✅ " + message)
                     InfoBar.success(
                         title="验证成功",
-                        content="API 密钥验证成功",
+                        content=message,
                         parent=self,
                         position=InfoBarPosition.TOP
                     )
-                    self.api_key_validated.emit(True, "API 密钥验证成功")
+                    self.api_key_validated.emit(True, message)
                 else:
-                    error_msg = response.get("error", "未知错误") if response else "无响应"
-                    self.validation_result.setText(f"❌ 验证失败: {error_msg}")
+                    self.validation_result.setText("❌ " + message)
                     InfoBar.error(
                         title="验证失败",
-                        content=error_msg,
+                        content=message,
                         parent=self,
                         position=InfoBarPosition.TOP
                     )
-                    self.api_key_validated.emit(False, f"验证失败: {error_msg}")
-            except Exception as e:
-                error_msg = str(e)
-                self.validation_result.setText(f"❌ 验证失败: {error_msg}")
-                InfoBar.error(
-                    title="验证失败",
-                    content=error_msg,
-                    parent=self,
-                    position=InfoBarPosition.TOP
-                )
-                self.api_key_validated.emit(False, f"验证失败: {error_msg}")
+                    self.api_key_validated.emit(False, message)
+            finally:
+                loop.close()
                 
         except Exception as e:
             error_msg = f"初始化失败: {str(e)}"

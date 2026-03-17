@@ -343,34 +343,31 @@ class ChatWidget(QWidget):
                     self.chat_conversation_id = conversation_service.create_conversation("新对话")
 
                 # 在新的事件循环中运行异步生成器
-                async def collect_response():
-                    full_response = ""
+                async def stream_response():
                     async for chunk in conversation_service.send_message_with_tools_stream(
                         self.chat_conversation_id, content, self.current_work_dir
                     ):
-                        full_response += chunk
-                    return full_response
+                        # 实时发送每个 chunk
+                        result_queue.put({"status": "chunk", "content": chunk})
 
                 # 创建新的事件循环并运行
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
-                    full_response = loop.run_until_complete(collect_response())
+                    loop.run_until_complete(stream_response())
                 finally:
                     loop.run_until_complete(loop.shutdown_asyncgens())
                     loop.close()
 
-                result_queue.put({"status": "success", "content": full_response})
+                result_queue.put({"status": "done"})
             except Exception as e:
                 result_queue.put({"status": "error", "data": str(e)})
-            finally:
                 result_queue.put({"status": "done"})
 
         threading.Thread(target=run_chat, daemon=True).start()
 
-        # 轮询结果
+        # 轮询结果并实时显示
         from PySide6.QtCore import QTimer
-        buffer = []
 
         def check_result():
             try:
@@ -381,10 +378,14 @@ class ChatWidget(QWidget):
                         self.chat_input.setFocus()
                         self._update_token_stats()
                         return
-                    elif result.get("status") == "success":
-                        content = result.get("content", "")
-                        buffer.append(content)
-                        self.chat_area.append(f"\n[AI]: {content}")
+                    elif result.get("status") == "chunk":
+                        # 实时显示流式内容
+                        chunk = result.get("content", "")
+                        # 移动光标到末尾并插入文本
+                        cursor = self.chat_area.textCursor()
+                        cursor.movePosition(cursor.End)
+                        self.chat_area.setTextCursor(cursor)
+                        self.chat_area.insertPlainText(chunk)
                     elif result.get("status") == "error":
                         self.chat_area.append(f"\n[错误] {result.get('data', '')}")
             except queue.Empty:
@@ -420,7 +421,7 @@ class ChatWidget(QWidget):
                 max_context = 0
 
             # 所有对话的总token统计
-            all_conversations = conv_repo.get_all()
+            all_conversations = conv_repo.list_all()
             all_messages = []
             for conv in all_conversations:
                 all_messages.extend(msg_repo.get_by_conversation(conv.id))

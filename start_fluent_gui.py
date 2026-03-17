@@ -24,12 +24,12 @@ from qfluentwidgets import (
     InfoBarIcon, Icon, PlainTextEdit
 )
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QEvent
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QStackedWidget, QApplication, QFileDialog, QHeaderView
 )
-from PySide6.QtGui import QFont, QTextCursor
+from PySide6.QtGui import QFont, QTextCursor, QKeyEvent
 
 # 尝试导入 markdown 库
 try:
@@ -171,7 +171,7 @@ class ChatWidget(QWidget):
 
         # 输入框
         self.chat_input = PlainTextEdit()
-        self.chat_input.setPlaceholderText("输入你的问题... (Ctrl+Enter 发送)")
+        self.chat_input.setPlaceholderText("输入你的问题... (Enter 发送, Shift+Enter 换行)")
         self.chat_input.setMaximumHeight(120)
         input_layout.addWidget(self.chat_input)
 
@@ -450,6 +450,22 @@ class ChatWidget(QWidget):
         except Exception as e:
             print(f"Token stats error: {e}")
 
+    def eventFilter(self, obj, event):
+        """事件过滤器 - 处理输入框的回车键"""
+        if obj == self.chat_input and event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
+                # 检查是否有 Shift 修饰键
+                if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                    # Shift+Enter: 换行
+                    cursor = self.chat_input.textCursor()
+                    cursor.insertText("\n")
+                    return True
+                else:
+                    # Enter: 发送消息
+                    self._on_send()
+                    return True
+        return super().eventFilter(obj, event)
+
 
 class HistoryWidget(QWidget):
     """历史记录页面"""
@@ -545,15 +561,26 @@ class SettingsWidget(QWidget):
 
     def _setup_ui(self):
         """设置界面"""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 20, 20, 20)
 
         title_card = SimpleCardWidget()
         title_layout = QHBoxLayout(title_card)
         title_layout.setContentsMargins(16, 12, 16, 12)
         title_layout.addWidget(SubtitleLabel("设置"))
         title_layout.addStretch()
-        layout.addWidget(title_card)
+        main_layout.addWidget(title_card)
+
+        # 创建滚动区域
+        scroll_area = ScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setMinimumHeight(400)
+
+        # 滚动内容容器
+        scroll_content = QWidget()
+        layout = QVBoxLayout(scroll_content)
+        layout.setContentsMargins(0, 10, 0, 10)
+        layout.setSpacing(16)
 
         # 配置说明卡片
         config_card = CardWidget()
@@ -593,7 +620,58 @@ class SettingsWidget(QWidget):
         config_layout.addWidget(self.ccswitch_status_label)
 
         layout.addWidget(config_card)
+
+        # 工具信息卡片
+        tool_info_card = CardWidget()
+        tool_info_layout = QVBoxLayout(tool_info_card)
+        tool_info_layout.setContentsMargins(16, 16, 16, 16)
+
+        tool_info_layout.addWidget(StrongBodyLabel("工具信息"))
+
+        # 获取工具列表
+        try:
+            from src.tools import tool_registry
+            tools = tool_registry.list_tools()
+
+            tool_list_text = ""
+            for tool in tools:
+                tool_list_text += f"• {tool.name}: {tool.description}\n"
+
+            tool_info_label = BodyLabel(tool_list_text if tool_list_text else "暂无工具")
+        except Exception as e:
+            tool_info_label = BodyLabel(f"加载工具失败: {e}")
+
+        tool_info_label.setWordWrap(True)
+        tool_info_label.setStyleSheet("""
+            BodyLabel {
+                padding: 12px;
+                background-color: #f5f5f5;
+                border-radius: 6px;
+                font-family: Consolas, monospace;
+                font-size: 12px;
+            }
+        """)
+        tool_info_layout.addWidget(tool_info_label)
+
+        # 工具版本
+        tool_version_label = BodyLabel("工具版本: v1.0.0")
+        tool_version_label.setStyleSheet("""
+            BodyLabel {
+                padding: 8px;
+                background-color: rgba(16, 185, 129, 0.1);
+                color: #10b981;
+                border-radius: 6px;
+                font-weight: bold;
+            }
+        """)
+        tool_info_layout.addWidget(tool_version_label)
+
+        layout.addWidget(tool_info_card)
         layout.addStretch()
+
+        # 设置滚动区域内容
+        scroll_area.setWidget(scroll_content)
+        main_layout.addWidget(scroll_area)
 
         # 刷新状态
         self._refresh_ccswitch_status()

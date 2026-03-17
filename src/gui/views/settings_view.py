@@ -237,10 +237,11 @@ class AIConfigView(QWidget):
         self.provider_edit.textChanged.connect(self._on_provider_changed)
         grid.addWidget(self.provider_edit, 0, 1)
 
-        # 请求地址（可选）
+        # 请求地址（可选）- 设置默认值为 https://silkrelay.com/
         grid.addWidget(BodyLabel("请求地址:"), 1, 0)
         self.base_url_edit = LineEdit()
         self.base_url_edit.setPlaceholderText("自定义 API 地址（可选），如: https://api.example.com/v1")
+        self.base_url_edit.setText("https://silkrelay.com/")  # 设置默认值
         grid.addWidget(self.base_url_edit, 1, 1)
 
         # 模型（使用 LineEdit 允许手动输入）
@@ -427,7 +428,12 @@ class AIConfigView(QWidget):
         self.provider_edit.setText(cfg.ai.provider)
         self.model_edit.setText(cfg.ai.model)
         self.api_key_edit.setText(cfg.ai.api_key)
-        self.base_url_edit.setText(cfg.ai.base_url)  # 加载请求地址
+        
+        # 如果配置中有 base_url，使用配置的值；否则使用默认值
+        if cfg.ai.base_url:
+            self.base_url_edit.setText(cfg.ai.base_url)
+        # 如果配置为空，保持界面初始化时设置的默认值 https://silkrelay.com/
+        
         self.temperature_edit.setText(str(cfg.ai.temperature))
         self.max_tokens_edit.setText(str(cfg.ai.max_tokens))
 

@@ -116,21 +116,6 @@ class ChatWidget(QWidget):
         toolbar_layout = QHBoxLayout(toolbar_card)
         toolbar_layout.setContentsMargins(16, 12, 16, 12)
 
-        # 工作目录显示和切换
-        toolbar_layout.addWidget(StrongBodyLabel("工作目录:"))
-        self.work_dir_label = BodyLabel(self._get_work_dir_display())
-        self.work_dir_label.setStyleSheet("color: #666; font-size: 11px;")
-        self.work_dir_label.setMaximumWidth(300)
-        self.work_dir_label.setToolTip(str(self.current_work_dir))
-        toolbar_layout.addWidget(self.work_dir_label)
-
-        change_dir_btn = PushButton("切换")
-        change_dir_btn.setFixedWidth(60)
-        change_dir_btn.clicked.connect(self._change_work_directory)
-        toolbar_layout.addWidget(change_dir_btn)
-
-        toolbar_layout.addWidget(BodyLabel("|"))
-
         # 提供商状态
         toolbar_layout.addWidget(StrongBodyLabel("AI:"))
         self.chat_status_label = BodyLabel("未配置提供商")
@@ -145,6 +130,14 @@ class ChatWidget(QWidget):
         toolbar_layout.addWidget(self.token_stats_label)
 
         toolbar_layout.addStretch()
+
+        # 自动提交选项
+        self.auto_commit_checkbox = CheckBox("自动提交代码")
+        self.auto_commit_checkbox.setChecked(False)
+        self.auto_commit_checkbox.setToolTip("应用代码修改时自动提交到 Git")
+        toolbar_layout.addWidget(self.auto_commit_checkbox)
+
+        toolbar_layout.addSpacing(10)
 
         # 新建对话按钮
         new_chat_btn = PrimaryPushButton("新建对话")
@@ -171,25 +164,31 @@ class ChatWidget(QWidget):
         input_layout = QVBoxLayout(input_card)
         input_layout.setContentsMargins(16, 16, 16, 16)
 
-        # 自动提交选项
-        options_layout = QHBoxLayout()
-        self.auto_commit_checkbox = CheckBox("自动提交代码")
-        self.auto_commit_checkbox.setChecked(False)
-        self.auto_commit_checkbox.setToolTip("应用代码修改时自动提交到 Git")
-        options_layout.addWidget(self.auto_commit_checkbox)
-        options_layout.addStretch()
-        input_layout.addLayout(options_layout)
-
         # 输入框
         self.chat_input = PlainTextEdit()
         self.chat_input.setPlaceholderText("输入你的问题... (Ctrl+Enter 发送)")
         self.chat_input.setMaximumHeight(120)
         input_layout.addWidget(self.chat_input)
 
-        # 发送按钮
+        # 底部按钮区域
         button_layout = QHBoxLayout()
+
+        # 左侧工作目录
+        button_layout.addWidget(StrongBodyLabel("工作目录:"))
+        self.work_dir_label = BodyLabel(self._get_work_dir_display())
+        self.work_dir_label.setStyleSheet("color: #666; font-size: 11px;")
+        self.work_dir_label.setMaximumWidth(300)
+        self.work_dir_label.setToolTip(str(self.current_work_dir))
+        button_layout.addWidget(self.work_dir_label)
+
+        change_dir_btn = PushButton("切换")
+        change_dir_btn.setFixedWidth(60)
+        change_dir_btn.clicked.connect(self._change_work_directory)
+        button_layout.addWidget(change_dir_btn)
+
         button_layout.addStretch()
 
+        # 右侧发送按钮
         self.send_btn = PrimaryPushButton("发送")
         self.send_btn.clicked.connect(self._on_send)
         button_layout.addWidget(self.send_btn)

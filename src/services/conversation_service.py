@@ -193,6 +193,9 @@ class ConversationService:
             if arguments is None:
                 arguments = {}
 
+            # 添加日志用于调试 - 记录收到的原始调用
+            print(f"[TOOL CALL] 工具: {tool_name}, 参数: {arguments}")
+
             # 验证必需参数
             tool = tool_registry.get(tool_name)
             if tool:
@@ -202,13 +205,14 @@ class ConversationService:
                         missing_params.append(param.name)
 
                 if missing_params:
+                    error_msg = (f"缺少必需参数: {', '.join(missing_params)}。工具 '{tool_name}' 需要以下参数: " +
+                                ", ".join([f"{p.name}({p.type})" for p in tool.parameters if p.required]))
+                    print(f"[TOOL ERROR] {error_msg}")
                     return {
                         "success": False,
-                        "error": f"缺少必需参数: {', '.join(missing_params)}。工具 '{tool_name}' 需要以下参数: " +
-                                ", ".join([f"{p.name}({p.type})" for p in tool.parameters if p.required])
+                        "error": error_msg
                     }
 
-            # 添加日志用于调试
             print(f"[DEBUG] 执行工具: {tool_name}, 参数: {arguments}")
 
             result = tool_registry.execute(tool_name, **arguments)

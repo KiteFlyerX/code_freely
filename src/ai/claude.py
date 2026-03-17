@@ -374,14 +374,10 @@ class ClaudeAI(BaseAI):
         # 这里我们创建一个包装器来捕获完整的 usage
         async def wrapper():
             # 首先发起请求以获取 input_tokens（在流开始前）
-            nonlocal usage_info
+            nonlocal usage_info, current_tool
             try:
-                # 创建一个非流式请求来获取 input_tokens
-                # 由于流式响应的 input_tokens 在响应头中，我们需要特殊处理
-                # 临时方案：使用流式响应，但捕获所有事件
                 stream = await self.async_client.messages.create(**request_params)
 
-                input_tokens = None
                 async for event in stream:
                     if event.type == "message_start":
                         if hasattr(event, 'usage') and event.usage:
@@ -392,8 +388,17 @@ class ClaudeAI(BaseAI):
                         if event.delta.type == "text_delta":
                             yield event.delta.text
                         elif event.delta.type == "input_json_delta":
-                            # 工具调用处理
-                            pass
+                            # 工具参数增量 - 需要累积
+                            if current_tool:
+                                import json
+                                partial = event.delta.partial_json
+                                try:
+                                    if not hasattr(current_tool, '_partial_args'):
+                                        current_tool._partial_args = ""
+                                    current_tool._partial_args += partial
+                                    current_tool.arguments = json.loads(current_tool._partial_args)
+                                except json.JSONDecodeError:
+                                    pass
 
                     elif event.type == "content_block_start":
                         if event.content_block.type == "tool_use":
@@ -403,8 +408,11 @@ class ClaudeAI(BaseAI):
                                 arguments={}
                             )
                             tool_calls.append(current_tool)
+                            print(f"[CLAUDE API] 收到工具调用: {event.content_block.name}")
 
                     elif event.type == "content_block_stop":
+                        if current_tool:
+                            print(f"[CLAUDE API] 工具调用完成: {current_tool.name}, 参数: {current_tool.arguments}")
                         current_tool = None
 
                     elif event.type == "message_delta":

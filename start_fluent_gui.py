@@ -645,10 +645,12 @@ class SettingsWidget(QWidget):
         tool_info_label.setStyleSheet("""
             BodyLabel {
                 padding: 12px;
-                background-color: #f5f5f5;
+                background-color: #ffffff;
+                color: #000000;
+                border: 1px solid #e0e0e0;
                 border-radius: 6px;
-                font-family: Consolas, monospace;
-                font-size: 12px;
+                font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
+                font-size: 13px;
             }
         """)
         tool_info_layout.addWidget(tool_info_label)

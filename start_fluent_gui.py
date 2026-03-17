@@ -238,7 +238,7 @@ class ChatWidget(QWidget):
                     self.chat_status_label.setText("API 密钥无效")
                     self.chat_status_label.setStyleSheet("color: orange;")
             else:
-                self.chat_status_label.setText("未配置 (使用 CC-Switch)")
+                self.chat_status_label.setText("未配置 (请在设置中添加)")
                 self.chat_status_label.setStyleSheet("color: orange;")
         except Exception as e:
             self.chat_status_label.setText(f"配置错误: {e}")
@@ -312,7 +312,7 @@ class ChatWidget(QWidget):
             self.chat_area.clear()
             self.chat_area.append(f"--- 新对话 (ID: {self.chat_conversation_id}) ---")
             self.chat_area.append("\n欢迎使用 CodeTraceAI！\n")
-            self.chat_area.append("配置提示: 请使用 CC-Switch 配置 AI 提供商\n")
+            self.chat_area.append("配置提示: 请在「设置」页面中添加 AI 提供商配置\n")
             InfoBar.success(
                 title="新对话已创建",
                 content=f"对话 ID: {self.chat_conversation_id}",
@@ -574,174 +574,6 @@ class KnowledgeWidget(QWidget):
         layout.addWidget(content_card, 1)
 
 
-class SettingsWidget(QWidget):
-    """设置页面"""
-
-    def __init__(self):
-        super().__init__()
-        self.setObjectName("settingsWidget")
-        self._setup_ui()
-
-    def _setup_ui(self):
-        """设置界面"""
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-
-        title_card = SimpleCardWidget()
-        title_layout = QHBoxLayout(title_card)
-        title_layout.setContentsMargins(16, 12, 16, 12)
-        title_layout.addWidget(SubtitleLabel("设置"))
-        title_layout.addStretch()
-        main_layout.addWidget(title_card)
-
-        # 创建滚动区域
-        scroll_area = ScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setMinimumHeight(400)
-
-        # 滚动内容容器
-        scroll_content = QWidget()
-        layout = QVBoxLayout(scroll_content)
-        layout.setContentsMargins(0, 10, 0, 10)
-        layout.setSpacing(16)
-
-        # 配置说明卡片
-        config_card = CardWidget()
-        config_layout = QVBoxLayout(config_card)
-        config_layout.setContentsMargins(16, 16, 16, 16)
-
-        config_layout.addWidget(StrongBodyLabel("AI 配置说明"))
-
-        ccswitch_info = BodyLabel()
-        ccswitch_info.setText(
-            "本应用使用 CC-Switch 管理 AI 提供商配置。\n\n"
-            "配置步骤:\n"
-            "1. 下载并安装 CC-Switch\n"
-            "2. 在 CC-Switch 中添加您的 AI 提供商和 API 密钥\n"
-            "3. 启用您想要使用的提供商\n"
-            "4. 重启本应用即可自动读取配置"
-        )
-        ccswitch_info.setWordWrap(True)
-        ccswitch_info.setStyleSheet("""
-            BodyLabel {
-                padding: 16px;
-                background-color: rgba(13, 110, 253, 0.08);
-                border-radius: 8px;
-            }
-        """)
-        config_layout.addWidget(ccswitch_info)
-
-        # CC-Switch 状态
-        self.ccswitch_status_label = BodyLabel("正在检测 cc-switch...")
-        self.ccswitch_status_label.setStyleSheet("""
-            BodyLabel {
-                padding: 12px;
-                background-color: #f5f5f5;
-                border-radius: 6px;
-            }
-        """)
-        config_layout.addWidget(self.ccswitch_status_label)
-
-        layout.addWidget(config_card)
-
-        # 工具信息卡片
-        tool_info_card = CardWidget()
-        tool_info_layout = QVBoxLayout(tool_info_card)
-        tool_info_layout.setContentsMargins(16, 16, 16, 16)
-
-        tool_info_layout.addWidget(StrongBodyLabel("工具信息"))
-
-        # 获取工具列表
-        try:
-            from src.tools import tool_registry
-            tools = tool_registry.list_tools()
-
-            tool_list_text = ""
-            for tool in tools:
-                tool_list_text += f"• {tool.name}: {tool.description}\n"
-
-            tool_info_label = BodyLabel(tool_list_text if tool_list_text else "暂无工具")
-        except Exception as e:
-            tool_info_label = BodyLabel(f"加载工具失败: {e}")
-
-        tool_info_label.setWordWrap(True)
-        tool_info_label.setStyleSheet("""
-            BodyLabel {
-                padding: 12px;
-                background-color: #ffffff;
-                color: #000000;
-                border: 1px solid #e0e0e0;
-                border-radius: 6px;
-                font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
-                font-size: 13px;
-            }
-        """)
-        tool_info_layout.addWidget(tool_info_label)
-
-        # 工具版本
-        self.tool_version_label = BodyLabel("工具版本: v1.0.0")
-        self.tool_version_label.setStyleSheet("""
-            BodyLabel {
-                padding: 8px;
-                background-color: rgba(16, 185, 129, 0.1);
-                color: #10b981;
-                border-radius: 6px;
-                font-weight: bold;
-            }
-        """)
-        tool_info_layout.addWidget(self.tool_version_label)
-
-        layout.addWidget(tool_info_card)
-        layout.addStretch()
-
-        # 设置滚动区域内容
-        scroll_area.setWidget(scroll_content)
-        main_layout.addWidget(scroll_area)
-
-        # 刷新状态
-        self._refresh_ccswitch_status()
-        self._refresh_version()
-
-    def _refresh_version(self):
-        """刷新版本号显示"""
-        try:
-            current_version = config_service.get_config().app_version
-            self.tool_version_label.setText(f"工具版本: v{current_version}")
-        except Exception as e:
-            print(f"刷新版本号失败: {e}")
-
-    def _refresh_ccswitch_status(self):
-        """刷新 CC-Switch 状态"""
-        if provider_manager is None:
-            self.ccswitch_status_label.setText("❌ 服务未初始化")
-            return
-
-        try:
-            provider = provider_manager.get_ccswitch_active_provider()
-            if provider:
-                self.ccswitch_status_label.setText(f"✅ CC-Switch: {provider.name} ({provider.model})")
-                self.ccswitch_status_label.setStyleSheet("""
-                    BodyLabel {
-                        padding: 12px;
-                        background-color: #e8f5e9;
-                        color: #2e7d32;
-                        border-radius: 6px;
-                    }
-                """)
-            else:
-                self.ccswitch_status_label.setText("⚠️ 未检测到 cc-switch 配置")
-                self.ccswitch_status_label.setStyleSheet("""
-                    BodyLabel {
-                        padding: 12px;
-                        background-color: #fff3e0;
-                        color: #ef6c00;
-                        border-radius: 6px;
-                    }
-                """)
-        except Exception as e:
-            self.ccswitch_status_label.setText(f"❌ 检测失败: {e}")
-
-
 class MainWindow(FluentWindow):
     """主窗口 - 使用 FluentWindow"""
 
@@ -758,7 +590,23 @@ class MainWindow(FluentWindow):
         self.history_widget = HistoryWidget()
         self.bug_widget = BugWidget()
         self.knowledge_widget = KnowledgeWidget()
-        self.settings_widget = SettingsWidget()
+        
+        # 导入完整的设置视图
+        try:
+            from src.gui.views.settings_view import SettingsView
+            self.settings_widget = SettingsView()
+            self.settings_widget.setObjectName("settingsWidget")  # 设置 objectName
+        except Exception as e:
+            print(f"导入设置视图失败: {e}")
+            # 如果导入失败，使用简单设置页面
+            class SimpleSettings(QWidget):
+                def __init__(self):
+                    super().__init__()
+                    self.setObjectName("settingsWidget")
+                    layout = QVBoxLayout(self)
+                    layout.addWidget(SubtitleLabel("设置"))
+                    layout.addWidget(BodyLabel(f"导入失败: {e}\n请检查 src/gui/views/settings_view.py"))
+            self.settings_widget = SimpleSettings()
 
         # 添加到导航
         self.addSubInterface(

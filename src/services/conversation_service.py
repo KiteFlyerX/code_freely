@@ -193,6 +193,21 @@ class ConversationService:
             if arguments is None:
                 arguments = {}
 
+            # 验证必需参数
+            tool = tool_registry.get(tool_name)
+            if tool:
+                missing_params = []
+                for param in tool.parameters:
+                    if param.required and param.name not in arguments:
+                        missing_params.append(param.name)
+
+                if missing_params:
+                    return {
+                        "success": False,
+                        "error": f"缺少必需参数: {', '.join(missing_params)}。工具 '{tool_name}' 需要以下参数: " +
+                                ", ".join([f"{p.name}({p.type})" for p in tool.parameters if p.required])
+                    }
+
             # 添加日志用于调试
             print(f"[DEBUG] 执行工具: {tool_name}, 参数: {arguments}")
 

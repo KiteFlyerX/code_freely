@@ -298,9 +298,8 @@ class BaseAI(ABC):
                             yield f"✓ 执行成功"
                     elif isinstance(result, dict):
                         error = result.get('error', '未知错误')
-                        if len(error) > 100:
-                            error = error[:100] + "..."
-                        yield f"✗ 错误: {error}"
+                        # 错误消息不截断，让 AI 看到完整信息
+                        yield f"❌ 工具执行失败: {error}"
                     else:
                         preview = result_str[:100]
                         if len(result_str) > 100:

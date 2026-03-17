@@ -166,14 +166,24 @@ class SettingsView(QWidget):
         model_input_layout.addWidget(self.model_input, 1)
         model_layout.addLayout(model_input_layout)
         
-        # 最大Tokens
+        # 最大Tokens - 使用下拉选择常用档位
         max_tokens_layout = QHBoxLayout()
         max_tokens_label = BodyLabel("最大 Tokens:")
-        self.max_tokens_input = SpinBox()
-        self.max_tokens_input.setRange(100, 128000)
-        self.max_tokens_input.setValue(4096)
+        self.max_tokens_combo = ComboBox()
+        # 常用档位：显示文本 -> 实际值
+        self.max_tokens_options = {
+            "2K (2048)": 2048,
+            "4K (4096)": 4096,
+            "8K (8192)": 8192,
+            "16K (16384)": 16384,
+            "32K (32768)": 32768,
+            "64K (65536)": 65536,
+            "128K (131072)": 131072
+        }
+        self.max_tokens_combo.addItems(list(self.max_tokens_options.keys()))
+        self.max_tokens_combo.setCurrentIndex(1)  # 默认选中 4K
         max_tokens_layout.addWidget(max_tokens_label)
-        max_tokens_layout.addWidget(self.max_tokens_input, 1)
+        max_tokens_layout.addWidget(self.max_tokens_combo, 1)
         model_layout.addLayout(max_tokens_layout)
         
         # 温度
@@ -458,6 +468,25 @@ class SettingsView(QWidget):
             )
             self.api_key_validated.emit(False, error_msg)
     
+    def _get_max_tokens_value(self) -> int:
+        """从下拉框获取最大 Tokens 值"""
+        current_text = self.max_tokens_combo.currentText()
+        return self.max_tokens_options.get(current_text, 4096)
+    
+    def _set_max_tokens_value(self, value: int):
+        """根据值设置下拉框选项"""
+        # 找到最接近的档位
+        closest_text = "4K (4096)"
+        min_diff = float('inf')
+        
+        for text, tokens in self.max_tokens_options.items():
+            diff = abs(tokens - value)
+            if diff < min_diff:
+                min_diff = diff
+                closest_text = text
+        
+        self.max_tokens_combo.setCurrentText(closest_text)
+    
     def _load_settings(self):
         """加载设置"""
         try:
@@ -469,7 +498,7 @@ class SettingsView(QWidget):
             self.model_input.setText(api_config.get("model", ""))
             
             if "max_tokens" in api_config:
-                self.max_tokens_input.setValue(api_config["max_tokens"])
+                self._set_max_tokens_value(api_config["max_tokens"])
             if "temperature" in api_config:
                 # 转换为整数存储 (0.7 -> 7)
                 self.temperature_input.setValue(int(api_config["temperature"] * 10))
@@ -517,7 +546,7 @@ class SettingsView(QWidget):
                     "api_key": self.api_key_input.text(),
                     "base_url": self.base_url_input.text(),
                     "model": self.model_input.text(),
-                    "max_tokens": self.max_tokens_input.value(),
+                    "max_tokens": self._get_max_tokens_value(),
                     "temperature": self.temperature_input.value() / 10.0
                 },
                 "analysis": {

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 设置视图
 应用配置界面 - 使用标签页分离基本信息和 AI 配置
@@ -229,31 +230,36 @@ class AIConfigView(QWidget):
         grid = QGridLayout()
         grid.setSpacing(12)
 
-        # 提供商（可编辑下拉框）
+        # 提供商（使用 LineEdit 允许手动输入）
         grid.addWidget(BodyLabel("提供商:"), 0, 0)
-        self.provider_combo = ComboBox()
-        self.provider_combo.addItems(["claude", "openai", "deepseek", "ollama", "gemini"])
-        self.provider_combo.setEditable(True)  # 允许手动输入
-        self.provider_combo.setPlaceholderText("选择或输入提供商...")
-        self.provider_combo.currentTextChanged.connect(self._on_provider_changed)
-        grid.addWidget(self.provider_combo, 0, 1)
+        self.provider_edit = LineEdit()
+        self.provider_edit.setPlaceholderText("输入提供商 (如: claude, openai, deepseek)...")
+        self.provider_edit.textChanged.connect(self._on_provider_changed)
+        grid.addWidget(self.provider_edit, 0, 1)
 
-        # 模型（可编辑下拉框）
+        # 模型（使用 LineEdit 允许手动输入）
         grid.addWidget(BodyLabel("模型:"), 1, 0)
-        self.model_combo = ComboBox()
-        self.model_combo.addItems([
-            "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
-            "gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo",
-            "deepseek-chat", "deepseek-coder", "deepseek-reasoner",
-            "gemini-pro", "gemini-ultra",
-            "llama-3-70b", "mistral-large", "qwen-72b"
-        ])
-        self.model_combo.setEditable(True)  # 允许手动输入
-        self.model_combo.setPlaceholderText("选择或输入模型...")
-        grid.addWidget(self.model_combo, 1, 1)
+        self.model_edit = LineEdit()
+        self.model_edit.setPlaceholderText("输入模型名称 (如: claude-3-5-sonnet-20241022)...")
+        grid.addWidget(self.model_edit, 1, 1)
+
+        # 常用模型快捷按钮
+        model_buttons_layout = QHBoxLayout()
+        common_models = [
+            ("Claude 3.5 Sonnet", "claude-3-5-sonnet-20241022"),
+            ("GPT-4o", "gpt-4o"),
+            ("DeepSeek", "deepseek-chat"),
+            ("Gemini Pro", "gemini-pro")
+        ]
+        for btn_text, model_name in common_models:
+            btn = PushButton(btn_text)
+            btn.clicked.connect(lambda checked, name=model_name: self.model_edit.setText(name))
+            model_buttons_layout.addWidget(btn)
+        model_buttons_layout.addStretch()
+        grid.addLayout(model_buttons_layout, 2, 0, 1, 2)
 
         # API 密钥
-        grid.addWidget(BodyLabel("API 密钥:"), 2, 0)
+        grid.addWidget(BodyLabel("API 密钥:"), 3, 0)
         api_key_widget = QWidget()
         api_key_layout = QHBoxLayout(api_key_widget)
         api_key_layout.setContentsMargins(0, 0, 0, 0)
@@ -268,23 +274,30 @@ class AIConfigView(QWidget):
         self.show_key_btn.clicked.connect(self._on_toggle_key_visibility)
         api_key_layout.addWidget(self.show_key_btn)
 
-        grid.addWidget(api_key_widget, 2, 1)
+        grid.addWidget(api_key_widget, 3, 1)
 
         # 温度
-        grid.addWidget(BodyLabel("温度:"), 3, 0)
-        self.temperature_spin = ComboBox()
-        self.temperature_spin.addItems(["0.0", "0.3", "0.5", "0.7", "1.0"])
-        self.temperature_spin.setCurrentText("0.7")
-        self.temperature_spin.setEditable(True)  # 允许手动输入
-        grid.addWidget(self.temperature_spin, 3, 1)
+        grid.addWidget(BodyLabel("温度:"), 4, 0)
+        self.temperature_edit = LineEdit()
+        self.temperature_edit.setPlaceholderText("0.0-1.0，默认 0.7")
+        self.temperature_edit.setText("0.7")
+        grid.addWidget(self.temperature_edit, 4, 1)
 
         # 最大 Tokens
-        grid.addWidget(BodyLabel("最大 Tokens:"), 4, 0)
-        self.max_tokens_spin = ComboBox()
-        self.max_tokens_spin.addItems(["1024", "2048", "4096", "8192", "16384", "32768", "65536"])
-        self.max_tokens_spin.setCurrentText("4096")
-        self.max_tokens_spin.setEditable(True)  # 允许手动输入
-        grid.addWidget(self.max_tokens_spin, 4, 1)
+        grid.addWidget(BodyLabel("最大 Tokens:"), 5, 0)
+        self.max_tokens_edit = LineEdit()
+        self.max_tokens_edit.setPlaceholderText("默认 4096")
+        self.max_tokens_edit.setText("4096")
+        grid.addWidget(self.max_tokens_edit, 5, 1)
+
+        # 常用 Token 快捷按钮
+        token_buttons_layout = QHBoxLayout()
+        for token_val in ["2048", "4096", "8192", "16384"]:
+            btn = PushButton(token_val)
+            btn.clicked.connect(lambda checked, val=token_val: self.max_tokens_edit.setText(val))
+            token_buttons_layout.addWidget(btn)
+        token_buttons_layout.addStretch()
+        grid.addLayout(token_buttons_layout, 6, 0, 1, 2)
 
         layout.addLayout(grid)
 
@@ -304,87 +317,13 @@ class AIConfigView(QWidget):
 
         return card
 
-    def _load_config(self):
-        """加载配置"""
-        cfg = config_service.get_config()
+    def _on_provider_changed(self, text):
+        """提供商改变时更新"""
+        pass
 
-        # AI 配置
-        self.provider_combo.setCurrentText(cfg.ai.provider)
-        self.model_combo.setCurrentText(cfg.ai.model)
-        self.api_key_edit.setText(cfg.ai.api_key)
-        self.temperature_spin.setCurrentText(str(cfg.ai.temperature))
-        self.max_tokens_spin.setCurrentText(str(cfg.ai.max_tokens))
-
-    def _save_config(self):
-        """保存配置"""
-        # 获取值，处理手动输入的情况
-        provider = self.provider_combo.currentText().strip()
-        model = self.model_combo.currentText().strip()
-        api_key = self.api_key_edit.text().strip()
-        temp_text = self.temperature_spin.currentText().strip()
-        max_tokens_text = self.max_tokens_spin.currentText().strip()
-
-        # 验证数值
-        try:
-            temperature = float(temp_text) if temp_text else 0.7
-        except ValueError:
-            temperature = 0.7
-
-        try:
-            max_tokens = int(max_tokens_text) if max_tokens_text else 4096
-        except ValueError:
-            max_tokens = 4096
-
-        # 保存配置
-        config_service.update_ai_config(
-            provider=provider,
-            model=model,
-            api_key=api_key,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-
-        InfoBar.success(
-            title="设置已保存",
-            content=f"AI 配置已更新\n提供商: {provider}\n模型: {model}",
-            orient=Qt.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=2000,
-            parent=self
-        )
-
-    def _on_provider_changed(self, provider: str):
-        """提供商变化处理"""
-        # 如果是手动输入的提供商，不更新模型列表
-        if not provider:
-            return
-
-        # 检查是否是预设的提供商
-        preset_providers = {
-            "claude": ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
-            "openai": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
-            "deepseek": ["deepseek-chat", "deepseek-coder", "deepseek-reasoner"],
-            "gemini": ["gemini-pro", "gemini-ultra", "gemini-flash"],
-            "ollama": ["llama-3-70b", "mistral-large", "qwen-72b", "codellama"]
-        }
-
-        if provider in preset_providers:
-            # 保存当前选中的模型
-            current_model = self.model_combo.currentText()
-            
-            # 清空并重新加载模型列表
-            self.model_combo.clear()
-            self.model_combo.addItems(preset_providers[provider])
-            
-            # 尝试恢复之前选中的模型
-            index = self.model_combo.findText(current_model)
-            if index >= 0:
-                self.model_combo.setCurrentIndex(index)
-
-    def _on_toggle_key_visibility(self, checked: bool):
-        """切换密钥可见性"""
-        if checked:
+    def _on_toggle_key_visibility(self):
+        """切换 API 密钥可见性"""
+        if self.show_key_btn.isChecked():
             self.api_key_edit.setEchoMode(LineEdit.Normal)
             self.show_key_btn.setText("隐藏")
         else:
@@ -393,30 +332,56 @@ class AIConfigView(QWidget):
 
     def _validate_api_key(self):
         """验证 API 密钥"""
-        current_key = self.api_key_edit.text().strip()
-        provider = self.provider_combo.currentText().strip()
+        provider = self.provider_edit.text().strip()
+        api_key = self.api_key_edit.text().strip()
+        model = self.model_edit.text().strip()
 
-        if not current_key:
+        if not provider:
             InfoBar.warning(
-                title="请输入 API 密钥",
-                content="请先输入 API 密钥再进行验证",
+                title="提示",
+                content="请输入提供商",
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
-                duration=3000,
+                duration=2000,
                 parent=self
             )
             return
 
-        if current_key:
-            config_service.save_api_key(provider, current_key)
+        if not api_key:
+            InfoBar.warning(
+                title="提示",
+                content="请输入 API 密钥",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self
+            )
+            return
 
-        is_valid = conversation_service.validate_api_key()
+        # 临时保存配置以进行验证
+        try:
+            temperature = float(self.temperature_edit.text())
+        except ValueError:
+            temperature = 0.7
+
+        try:
+            max_tokens = int(self.max_tokens_edit.text())
+        except ValueError:
+            max_tokens = 4096
+
+        # 验证 API 密钥
+        is_valid, message = conversation_service.validate_api_key(
+            provider=provider,
+            api_key=api_key,
+            model=model
+        )
 
         if is_valid:
             InfoBar.success(
-                title="API 密钥有效",
-                content=f"密钥验证成功\n提供商: {provider}",
+                title="验证成功",
+                content=f"API 密钥有效，已连接到 {provider}",
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -425,8 +390,8 @@ class AIConfigView(QWidget):
             )
         else:
             InfoBar.error(
-                title="API 密钥无效",
-                content="请检查密钥是否正确",
+                title="验证失败",
+                content=f"API 密钥无效或连接失败: {message}",
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -434,9 +399,115 @@ class AIConfigView(QWidget):
                 parent=self
             )
 
+    def _load_config(self):
+        """加载配置"""
+        cfg = config_service.get_config()
+
+        self.provider_edit.setText(cfg.provider)
+        self.model_edit.setText(cfg.model)
+        self.api_key_edit.setText(cfg.api_key)
+        self.temperature_edit.setText(str(cfg.temperature))
+        self.max_tokens_edit.setText(str(cfg.max_tokens))
+
+    def _save_config(self):
+        """保存配置"""
+        provider = self.provider_edit.text().strip()
+        model = self.model_edit.text().strip()
+        api_key = self.api_key_edit.text().strip()
+
+        if not provider:
+            InfoBar.warning(
+                title="提示",
+                content="请输入提供商",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self
+            )
+            return
+
+        if not model:
+            InfoBar.warning(
+                title="提示",
+                content="请输入模型名称",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self
+            )
+            return
+
+        if not api_key:
+            InfoBar.warning(
+                title="提示",
+                content="请输入 API 密钥",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self
+            )
+            return
+
+        # 验证温度和最大 tokens
+        try:
+            temperature = float(self.temperature_edit.text())
+            if not 0.0 <= temperature <= 1.0:
+                raise ValueError("温度必须在 0.0-1.0 之间")
+        except ValueError as e:
+            InfoBar.warning(
+                title="提示",
+                content=f"温度值无效: {e}",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self
+            )
+            return
+
+        try:
+            max_tokens = int(self.max_tokens_edit.text())
+            if max_tokens < 1:
+                raise ValueError("最大 tokens 必须大于 0")
+        except ValueError as e:
+            InfoBar.warning(
+                title="提示",
+                content=f"最大 tokens 无效: {e}",
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self
+            )
+            return
+
+        # 保存配置
+        config_service.update_ai_config(
+            provider=provider,
+            model=model,
+            api_key=api_key,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+
+        InfoBar.success(
+            title="配置已保存",
+            content=f"提供商: {provider}, 模型: {model}",
+            orient=Qt.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=2000,
+            parent=self
+        )
+
 
 class SettingsView(QWidget):
-    """设置视图 - 使用标签页分离基本信息和 AI 配置"""
+    """设置视图 - 使用标签页分离配置"""
+
+    configChanged = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -445,41 +516,39 @@ class SettingsView(QWidget):
     def _setup_ui(self):
         """设置界面"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(16)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        # 标题
-        title = SubtitleLabel("设置")
-        layout.addWidget(title)
+        # 标签页
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setTabPosition(QTabWidget.North)
 
-        # 使用 SegmentedWidget 作为标签切换器
-        self.segmented_widget = SegmentedWidget()
-        self.segmented_widget.addItem("basic", "基本信息")
-        self.segmented_widget.addItem("ai", "AI 配置")
-        self.segmented_widget.setCurrentItem("basic")
-        self.segmented_widget.currentItemChanged.connect(self._on_tab_changed)
-        layout.addWidget(self.segmented_widget)
-
-        # 内容区域
-        self.content_stack = QTabWidget()
-        self.content_stack.setTabBarAutoHide(True)
-        self.content_stack.tabBar().hide()  # 隐藏默认的标签栏
-
-        # 创建两个视图
+        # 基本信息标签页
         self.basic_info_view = BasicInfoView()
+        self.tab_widget.addTab(self.basic_info_view, "基本信息")
+
+        # AI 配置标签页
         self.ai_config_view = AIConfigView()
+        self.tab_widget.addTab(self.ai_config_view, "AI 配置")
 
-        self.content_stack.addTab(self.basic_info_view, "基本信息")
-        self.content_stack.addTab(self.ai_config_view, "AI 配置")
+        layout.addWidget(self.tab_widget)
 
-        # 默认显示第一个标签
-        self.content_stack.setCurrentIndex(0)
+        # 连接信号
+        self.basic_info_view.restart_application_signal = self.restart_application
+        self.ai_config_view.config_changed_signal = self.configChanged
 
-        layout.addWidget(self.content_stack)
+    def restart_application(self):
+        """重启应用程序"""
+        # 获取主窗口并调用重启方法
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'restart_app'):
+                parent.restart_app()
+                return
+            parent = parent.parent()
 
-    def _on_tab_changed(self, item_key: str):
-        """标签切换处理"""
-        if item_key == "basic":
-            self.content_stack.setCurrentIndex(0)
-        elif item_key == "ai":
-            self.content_stack.setCurrentIndex(1)
+        # 如果找不到主窗口，使用备用方法
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        app.closeAllWindows()
+        app.exit(133)

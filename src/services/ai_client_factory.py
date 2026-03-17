@@ -131,17 +131,12 @@ class AIClientFactory:
     def get_active_client(self) -> Optional[BaseAI]:
         """
         获取当前活动的 AI 客户端
-        优先从 cc-switch 读取，如果失败则从本地数据库读取
+        从本地数据库读取
 
         Returns:
             BaseAI 实例，如果没有活动提供商则返回 None
         """
-        # 首先尝试从 cc-switch 获取活跃提供商
-        config = self._get_provider_manager().get_ccswitch_active_provider()
-
-        # 如果 cc-switch 读取失败，回退到本地数据库
-        if not config:
-            config = self._get_provider_manager().get_active_provider()
+        config = self._get_provider_manager().get_active_provider()
 
         if not config or not config.api_key:
             return None

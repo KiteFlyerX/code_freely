@@ -20,9 +20,7 @@ from qfluentwidgets import (
 import os
 import json
 
-from ...services import config_service
-from ...services.provider_manager import ProviderManager
-from ...services.ai_client_factory import AIClientFactory
+from ...services import config_service, provider_manager, get_ai_client
 
 
 class SettingsView(QWidget):
@@ -35,7 +33,6 @@ class SettingsView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.config = config_service.get_config()
-        self.provider_manager = ProviderManager()
         
         self._init_ui()
         self._load_settings()
@@ -398,7 +395,7 @@ class SettingsView(QWidget):
         self.validation_result.setText("⏳ 正在验证...")
         
         try:
-            # 创建临时客户端进行验证
+            # 构建临时配置
             temp_config = {
                 "api_key": api_key,
                 "model": self.model_input.text().strip() or "test",
@@ -409,12 +406,12 @@ class SettingsView(QWidget):
             if base_url:
                 temp_config["base_url"] = base_url
             
-            # 使用 AIClientFactory 创建客户端
-            temp_client = AIClientFactory.create_client(provider, temp_config)
+            # 使用 get_ai_client 函数创建客户端
+            client = get_ai_client(provider, temp_config)
             
             # 尝试发送测试请求
             try:
-                response = temp_client.send_message("Hello", [])
+                response = client.send_message("Hello", [])
                 
                 if response and response.get("success"):
                     self.validation_result.setText("✅ API 密钥验证成功")

@@ -128,6 +128,42 @@ class ConfigService:
             return self.load_config()
         return self._config
 
+    def update_config(self, settings: Dict[str, Any]) -> None:
+        """
+        更新配置（批量更新）
+        
+        Args:
+            settings: 设置字典，包含 api, analysis, display 等配置
+        """
+        config = self.get_config()
+        
+        # 更新 AI 配置
+        if "api" in settings:
+            api_config = settings["api"]
+            if "provider" in api_config:
+                config.ai.provider = api_config["provider"]
+            if "api_key" in api_config:
+                config.ai.api_key = api_config["api_key"]
+            if "base_url" in api_config:
+                config.ai.base_url = api_config["base_url"]
+            if "model" in api_config:
+                config.ai.model = api_config["model"]
+            if "max_tokens" in api_config:
+                config.ai.max_tokens = api_config["max_tokens"]
+            if "temperature" in api_config:
+                config.ai.temperature = api_config["temperature"]
+        
+        # 更新应用配置
+        if "display" in settings:
+            display_config = settings["display"]
+            if "theme" in display_config:
+                config.theme = display_config["theme"]
+        
+        # 注意：analysis 配置不在 AppConfig 中，如果需要可以扩展
+        # 这里暂时忽略 analysis 配置
+        
+        self.save_config()
+
     def update_ai_config(self, **kwargs) -> None:
         """更新 AI 配置"""
         config = self.get_config()

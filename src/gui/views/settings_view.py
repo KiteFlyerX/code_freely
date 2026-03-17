@@ -582,3 +582,22 @@ class SettingsView(QWidget):
         app = QApplication.instance()
         app.closeAllWindows()
         app.exit(133)
+
+    def check_ai_config(self) -> tuple[bool, str]:
+        """
+        检查 AI 配置是否完整
+        返回: (是否配置, 错误信息)
+        """
+        cfg = config_service.get_config()
+        
+        # 检查必需的配置项
+        if not cfg.ai.provider:
+            return False, "未配置 AI 提供商"
+        
+        if not cfg.ai.model:
+            return False, "未配置 AI 模型"
+        
+        if not cfg.ai.api_key:
+            return False, "未配置 API 密钥"
+        
+        return True, ""

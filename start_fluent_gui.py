@@ -133,7 +133,12 @@ class ChatWidget(QWidget):
 
         # 自动提交选项
         self.auto_commit_checkbox = CheckBox("自动提交代码")
-        self.auto_commit_checkbox.setChecked(False)
+        # 从配置中读取自动提交状态
+        try:
+            auto_commit_enabled = config_service.get_config().auto_commit
+            self.auto_commit_checkbox.setChecked(auto_commit_enabled)
+        except:
+            self.auto_commit_checkbox.setChecked(False)
         self.auto_commit_checkbox.setToolTip("应用代码修改时自动提交到 Git")
         toolbar_layout.addWidget(self.auto_commit_checkbox)
 
@@ -330,6 +335,10 @@ class ChatWidget(QWidget):
 
         # 禁用输入
         self._set_processing(True)
+
+        # 同步自动提交选项到配置
+        from src.services.config_service import config_service
+        config_service.update_app_config(auto_commit=self.auto_commit_checkbox.isChecked())
 
         # 使用线程处理
         import queue

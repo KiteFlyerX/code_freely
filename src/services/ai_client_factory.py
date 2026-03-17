@@ -61,6 +61,10 @@ class AIClientFactory:
             temperature=config.temperature,
             max_tokens=config.max_tokens,
             top_p=config.top_p,
+            # 添加重试配置
+            max_retries=3,  # 最多重试 3 次
+            retry_delay=1.0,  # 初始重试延迟 1 秒
+            timeout=300,  # 超时时间 5 分钟
         )
 
     def _create_openai_client(self, config: ProviderConfig) -> OpenAI:
@@ -72,6 +76,10 @@ class AIClientFactory:
             temperature=config.temperature,
             max_tokens=config.max_tokens,
             top_p=config.top_p,
+            # 添加重试配置
+            max_retries=3,  # 最多重试 3 次
+            retry_delay=1.0,  # 初始重试延迟 1 秒
+            timeout=300,  # 超时时间 5 分钟
         )
 
     def _create_deepseek_client(self, config: ProviderConfig) -> DeepSeekAI:
@@ -82,6 +90,10 @@ class AIClientFactory:
             temperature=config.temperature,
             max_tokens=config.max_tokens,
             top_p=config.top_p,
+            # 添加重试配置
+            max_retries=3,  # 最多重试 3 次
+            retry_delay=1.0,  # 初始重试延迟 1 秒
+            timeout=300,  # 超时时间 5 分钟
         )
 
     def _create_custom_client(self, config: ProviderConfig) -> BaseAI:

@@ -31,18 +31,24 @@ class OpenAI(BaseAI):
 
         # 设置超时时间（默认 5 分钟）
         timeout = kwargs.get("timeout", 300)
+        
+        # 获取重试配置
+        self.max_retries = kwargs.get("max_retries", 3)
+        self.retry_delay = kwargs.get("retry_delay", 1.0)
 
         # 初始化异步客户端
         if base_url:
             self.client = AsyncOpenAI(
                 api_key=api_key,
                 base_url=base_url,
-                timeout=httpx.Timeout(timeout=timeout, connect=60)
+                timeout=httpx.Timeout(timeout=timeout, connect=60),
+                max_retries=0  # 禁用内置重试，我们自己实现
             )
         else:
             self.client = AsyncOpenAI(
                 api_key=api_key,
-                timeout=httpx.Timeout(timeout=timeout, connect=60)
+                timeout=httpx.Timeout(timeout=timeout, connect=60),
+                max_retries=0
             )
 
         # 设置默认参数
@@ -111,6 +117,42 @@ class OpenAI(BaseAI):
             result.insert(0, system_message)
 
         return result
+
+    async def _retry_stream_request(self, request_func, *args, **kwargs):
+        """
+        带重试的流式请求
+        
+        Args:
+            request_func: 请求函数
+            *args: 位置参数
+            **kwargs: 关键字参数
+            
+        Yields:
+            流式响应块
+        """
+        last_error = None
+        
+        for attempt in range(self.max_retries):
+            try:
+                stream = await request_func(*args, **kwargs)
+                async for chunk in stream:
+                    yield chunk
+                return  # 成功完成，退出重试
+            except (ConnectionError, OSError, TimeoutError) as e:
+                last_error = e
+                if attempt < self.max_retries - 1:
+                    # 指数退避
+                    delay = self.retry_delay * (2 ** attempt)
+                    print(f"[OPENAI API] 连接中断，{delay}秒后重试 (尝试 {attempt + 1}/{self.max_retries}): {e}")
+                    await asyncio.sleep(delay)
+                else:
+                    print(f"[OPENAI API] 重试失败，已达最大重试次数: {e}")
+            except Exception as e:
+                # 其他异常不重试
+                raise RuntimeError(f"OpenAI API 错误: {e}") from e
+        
+        # 所有重试都失败
+        raise RuntimeError(f"流式请求失败（已重试 {self.max_retries} 次）: {last_error}") from last_error
 
     async def chat(
         self,
@@ -202,7 +244,8 @@ class OpenAI(BaseAI):
         api_messages = self._convert_messages(messages)
 
         try:
-            stream = await self.client.chat.completions.create(
+            async for chunk in self._retry_stream_request(
+                self.client.chat.completions.create,
                 model=self.model,
                 messages=api_messages,
                 max_tokens=config.max_tokens or self.default_max_tokens,
@@ -210,9 +253,7 @@ class OpenAI(BaseAI):
                 top_p=config.top_p,
                 stream=True,
                 **config.extra_params
-            )
-
-            async for chunk in stream:
+            ):
                 if chunk.choices and chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
 

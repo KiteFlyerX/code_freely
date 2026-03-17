@@ -6,14 +6,14 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QScrollArea, QFrame, QListWidget, QListWidgetItem,
-    QDialog
+    QDialog, QLabel
 )
 from qfluentwidgets import (
     PushButton, PrimaryPushButton, LineEdit,
     ComboBox, CheckBox, BodyLabel, StrongBodyLabel,
     SubtitleLabel, CardWidget, SimpleCardWidget,
     InfoBar, InfoBarPosition, FluentIcon,
-    MessageBox, Dialog
+    MessageBox
 )
 
 from ...services import (
@@ -25,11 +25,11 @@ from ...services.provider_service import ProviderPreset
 from ...database import init_database
 
 
-class ProviderConfigDialog(Dialog):
-    """提供商配置对话框"""
+class ProviderConfigDialog(QDialog):
+    """提供商配置对话框 - 使用标准 QDialog 避免 qfluentwidgets API 兼容问题"""
 
     def __init__(self, preset: ProviderPreset = None, parent=None):
-        super().__init__("配置提供商", parent)
+        super().__init__(parent)
         self.preset = preset
         self._is_edit_mode = False  # 标记是否为编辑模式
         self._setup_ui()
@@ -37,6 +37,9 @@ class ProviderConfigDialog(Dialog):
 
     def _setup_ui(self):
         """设置界面"""
+        self.setWindowTitle("配置提供商")
+        self.setMinimumWidth(600)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(12)
@@ -222,13 +225,15 @@ class ProviderConfigDialog(Dialog):
         )
 
 
-class PresetImportDialog(Dialog):
-    """预设导入对话框"""
+class PresetImportDialog(QDialog):
+    """预设导入对话框 - 使用标准 QDialog 避免 qfluentwidgets API 兼容问题"""
 
     preset_selected = Signal(str)
 
     def __init__(self, parent=None):
-        super().__init__("从预设导入", parent)
+        super().__init__(parent)
+        self.setWindowTitle("从预设导入")
+        self.setMinimumWidth(500)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -563,18 +568,24 @@ class SettingsView(QWidget):
 
     def _load_providers(self):
         """加载提供商列表"""
-        init_database()
+        try:
+            init_database()
+        except Exception as e:
+            print(f"数据库初始化警告: {e}")
 
         self.provider_list.clear()
 
-        providers = provider_manager.get_providers()
-        active = provider_manager.get_active_provider()
+        try:
+            providers = provider_manager.get_providers()
+            active = provider_manager.get_active_provider()
 
-        for provider in providers:
-            is_active = " [活动中]" if active and provider.id == active.id else ""
-            item = QListWidgetItem(f"{provider.name} ({provider.id}){is_active}")
-            item.setData(Qt.UserRole, provider.id)
-            self.provider_list.addItem(item)
+            for provider in providers:
+                is_active = " [活动中]" if active and provider.id == active.id else ""
+                item = QListWidgetItem(f"{provider.name} ({provider.id}){is_active}")
+                item.setData(Qt.UserRole, provider.id)
+                self.provider_list.addItem(item)
+        except Exception as e:
+            print(f"加载提供商失败: {e}")
 
     def _save_config(self):
         """保存配置"""
@@ -635,11 +646,6 @@ class SettingsView(QWidget):
 
         # 关闭所有窗口
         app.closeAllWindows()
-
-        # 准备重启参数
-        # 使用 QProcess 或直接退出并让启动脚本重启
-        # 这里我们使用简单的退出方式，用户可以手动重新启动
-        # 或者可以保存当前状态并退出
 
         # 保存配置
         self._save_config()

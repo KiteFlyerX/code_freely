@@ -168,11 +168,56 @@ db_manager = DatabaseManager()
 def init_database():
     """
     初始化数据库
-    创建数据目录和表结构
+    创建数据目录和表结构，自动迁移缺失的列
     """
     manager = DatabaseManager()
     manager.create_tables()
+
+    # 自动迁移：添加缺失的列
+    _migrate_database(manager)
+
     return manager
+
+
+def _migrate_database(manager):
+    """
+    自动迁移数据库，添加缺失的列
+
+    检查并添加新增的列，避免删除现有数据
+    """
+    from sqlalchemy import inspect, text
+    from sqlalchemy.engine import reflection
+
+    engine = manager.engine
+    inspector = inspect(engine)
+
+    # 获取现有表
+    existing_tables = inspector.get_table_names()
+
+    # 迁移 conversation_messages 表
+    if "conversation_messages" in existing_tables:
+        # 获取现有列
+        columns = [col["name"] for col in inspector.get_columns("conversation_messages")]
+
+        # 需要添加的新列
+        new_columns = {
+            "input_tokens": "INTEGER",
+            "output_tokens": "INTEGER",
+            "total_tokens": "INTEGER",
+            "context_length": "INTEGER",
+        }
+
+        with engine.connect() as conn:
+            for column_name, column_type in new_columns.items():
+                if column_name not in columns:
+                    try:
+                        conn.execute(text(f"ALTER TABLE conversation_messages ADD COLUMN {column_name} {column_type}"))
+                        conn.commit()
+                        print(f"[Migration] Added column: conversation_messages.{column_name}")
+                    except Exception as e:
+                        # 列可能已存在或其他错误，忽略
+                        if f"duplicate column name: {column_name}" not in str(e).lower():
+                            print(f"[Migration] Warning adding {column_name}: {e}")
 
 
 def get_db_session() -> Session:

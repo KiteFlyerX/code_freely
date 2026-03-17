@@ -237,11 +237,17 @@ class AIConfigView(QWidget):
         self.provider_edit.textChanged.connect(self._on_provider_changed)
         grid.addWidget(self.provider_edit, 0, 1)
 
+        # 请求地址（可选）
+        grid.addWidget(BodyLabel("请求地址:"), 1, 0)
+        self.base_url_edit = LineEdit()
+        self.base_url_edit.setPlaceholderText("自定义 API 地址（可选），如: https://api.example.com/v1")
+        grid.addWidget(self.base_url_edit, 1, 1)
+
         # 模型（使用 LineEdit 允许手动输入）
-        grid.addWidget(BodyLabel("模型:"), 1, 0)
+        grid.addWidget(BodyLabel("模型:"), 2, 0)
         self.model_edit = LineEdit()
         self.model_edit.setPlaceholderText("输入模型名称 (如: claude-3-5-sonnet-20241022)...")
-        grid.addWidget(self.model_edit, 1, 1)
+        grid.addWidget(self.model_edit, 2, 1)
 
         # 常用模型快捷按钮
         model_buttons_layout = QHBoxLayout()
@@ -256,10 +262,10 @@ class AIConfigView(QWidget):
             btn.clicked.connect(lambda checked, name=model_name: self.model_edit.setText(name))
             model_buttons_layout.addWidget(btn)
         model_buttons_layout.addStretch()
-        grid.addLayout(model_buttons_layout, 2, 0, 1, 2)
+        grid.addLayout(model_buttons_layout, 3, 0, 1, 2)
 
         # API 密钥
-        grid.addWidget(BodyLabel("API 密钥:"), 3, 0)
+        grid.addWidget(BodyLabel("API 密钥:"), 4, 0)
         api_key_widget = QWidget()
         api_key_layout = QHBoxLayout(api_key_widget)
         api_key_layout.setContentsMargins(0, 0, 0, 0)
@@ -274,21 +280,21 @@ class AIConfigView(QWidget):
         self.show_key_btn.clicked.connect(self._on_toggle_key_visibility)
         api_key_layout.addWidget(self.show_key_btn)
 
-        grid.addWidget(api_key_widget, 3, 1)
+        grid.addWidget(api_key_widget, 4, 1)
 
         # 温度
-        grid.addWidget(BodyLabel("温度:"), 4, 0)
+        grid.addWidget(BodyLabel("温度:"), 5, 0)
         self.temperature_edit = LineEdit()
         self.temperature_edit.setPlaceholderText("0.0-1.0，默认 0.7")
         self.temperature_edit.setText("0.7")
-        grid.addWidget(self.temperature_edit, 4, 1)
+        grid.addWidget(self.temperature_edit, 5, 1)
 
         # 最大 Tokens
-        grid.addWidget(BodyLabel("最大 Tokens:"), 5, 0)
+        grid.addWidget(BodyLabel("最大 Tokens:"), 6, 0)
         self.max_tokens_edit = LineEdit()
         self.max_tokens_edit.setPlaceholderText("默认 4096")
         self.max_tokens_edit.setText("4096")
-        grid.addWidget(self.max_tokens_edit, 5, 1)
+        grid.addWidget(self.max_tokens_edit, 6, 1)
 
         # 常用 Token 快捷按钮
         token_buttons_layout = QHBoxLayout()
@@ -297,7 +303,7 @@ class AIConfigView(QWidget):
             btn.clicked.connect(lambda checked, val=token_val: self.max_tokens_edit.setText(val))
             token_buttons_layout.addWidget(btn)
         token_buttons_layout.addStretch()
-        grid.addLayout(token_buttons_layout, 6, 0, 1, 2)
+        grid.addLayout(token_buttons_layout, 7, 0, 1, 2)
 
         layout.addLayout(grid)
 
@@ -335,6 +341,7 @@ class AIConfigView(QWidget):
         provider = self.provider_edit.text().strip()
         api_key = self.api_key_edit.text().strip()
         model = self.model_edit.text().strip()
+        base_url = self.base_url_edit.text().strip()
 
         if not provider:
             InfoBar.warning(
@@ -375,7 +382,8 @@ class AIConfigView(QWidget):
         is_valid, message = conversation_service.validate_api_key(
             provider=provider,
             api_key=api_key,
-            model=model
+            model=model,
+            base_url=base_url if base_url else None
         )
 
         if is_valid:
@@ -407,6 +415,7 @@ class AIConfigView(QWidget):
         self.provider_edit.setText(cfg.ai.provider)
         self.model_edit.setText(cfg.ai.model)
         self.api_key_edit.setText(cfg.ai.api_key)
+        self.base_url_edit.setText(cfg.ai.base_url)  # 加载请求地址
         self.temperature_edit.setText(str(cfg.ai.temperature))
         self.max_tokens_edit.setText(str(cfg.ai.max_tokens))
 
@@ -415,6 +424,7 @@ class AIConfigView(QWidget):
         provider = self.provider_edit.text().strip()
         model = self.model_edit.text().strip()
         api_key = self.api_key_edit.text().strip()
+        base_url = self.base_url_edit.text().strip()  # 获取请求地址
 
         if not provider:
             InfoBar.warning(
@@ -485,18 +495,19 @@ class AIConfigView(QWidget):
             )
             return
 
-        # 保存配置 - 使用 update_ai_config
+        # 保存配置 - 使用 update_ai_config，包含 base_url
         config_service.update_ai_config(
             provider=provider,
             model=model,
             api_key=api_key,
+            base_url=base_url,  # 保存请求地址
             temperature=temperature,
             max_tokens=max_tokens
         )
 
         InfoBar.success(
             title="配置已保存",
-            content=f"提供商: {provider}, 模型: {model}",
+            content=f"提供商: {provider}, 模型: {model}" + (f", 地址: {base_url}" if base_url else ""),
             orient=Qt.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,

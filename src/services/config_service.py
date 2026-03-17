@@ -17,6 +17,7 @@ class AIConfig:
     provider: str = "claude"  # claude, openai, deepseek
     model: str = "claude-sonnet-4-6"
     api_key: str = ""
+    base_url: str = ""  # API 请求地址（可选，用于自定义端点）
     temperature: float = 0.7
     max_tokens: int = 4096
     top_p: float = 1.0

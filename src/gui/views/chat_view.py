@@ -289,20 +289,13 @@ class ChatView(QWidget):
         )
 
     def _check_provider_config(self) -> bool:
-        """检查提供商配置，优先使用 cc-switch 配置并自动同步到本地数据库"""
+        """检查提供商配置，仅使用用户在本地配置的提供商"""
         try:
             from ...database import init_database
             init_database()
 
-            # 优先从 cc-switch 获取活跃提供商
-            ccswitch_provider = provider_manager.get_ccswitch_active_provider()
-            provider = ccswitch_provider
-            is_from_ccswitch = True
-
-            if not provider:
-                # 如果 cc-switch 不可用，从本地数据库读取
-                provider = provider_manager.get_active_provider()
-                is_from_ccswitch = False
+            # 仅从本地数据库读取用户配置的提供商
+            provider = provider_manager.get_active_provider()
 
             if not provider:
                 self.model_label.setText("未配置提供商")
@@ -338,22 +331,8 @@ class ChatView(QWidget):
                 )
                 return False
 
-            # 【关键修复】如果来自 cc-switch，自动同步到本地数据库
-            if is_from_ccswitch:
-                try:
-                    # 更新或添加提供商配置到本地数据库
-                    provider_manager.add_provider(provider)
-                    # 切换为活跃提供商
-                    provider_manager.switch_provider(provider.id)
-                    print(f"✓ 已同步 CC-Switch 配置到本地: {provider.name} ({provider.id})")
-                except Exception as sync_error:
-                    print(f"⚠ 同步 CC-Switch 配置失败: {sync_error}")
-                    # 同步失败不影响继续使用，只是无法持久化
-
             # 配置有效 - 更新显示信息
-            # 显示提供商名称和模型，添加 cc-switch 来源标识
-            ccswitch_tag = " [CC-Switch]" if is_from_ccswitch else ""
-            self.model_label.setText(f"{provider.name} ({provider.model}){ccswitch_tag}")
+            self.model_label.setText(f"{provider.name} ({provider.model})")
             self.model_label.setStyleSheet("color: #0078d4; font-weight: bold;")
 
             # 显示代理信息
@@ -370,8 +349,7 @@ class ChatView(QWidget):
                 endpoint_short = endpoint_short[:27] + "..."
 
             # 状态标签显示详细信息
-            source_tag = "CC-Switch" if is_from_ccswitch else "本地"
-            status_text = f"[{source_tag}] 提供商: {provider.name} | 模型: {provider.model} | 端点: {endpoint_short}"
+            status_text = f"提供商: {provider.name} | 模型: {provider.model} | 端点: {endpoint_short}"
             if provider.proxy_enabled:
                 status_text += " | 已启用代理"
             self.status_label.setText(status_text)

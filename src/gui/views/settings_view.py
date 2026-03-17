@@ -90,7 +90,7 @@ class SettingsView(QWidget):
         provider_input_layout = QHBoxLayout()
         provider_label2 = BodyLabel("提供商:")
         self.provider_combo = ComboBox()
-        self.provider_combo.addItems(["openai", "anthropic", "ollama", "deepseek", "openrouter"])
+        self.provider_combo.addItems(["openai", "anthropic", "claude", "ollama", "deepseek", "openrouter"])
         self.provider_combo.currentTextChanged.connect(self._on_provider_changed)
         provider_input_layout.addWidget(provider_label2)
         provider_input_layout.addWidget(self.provider_combo, 1)
@@ -347,6 +347,10 @@ class SettingsView(QWidget):
             },
             "anthropic": {
                 "model": "claude-3-opus-20240229",
+                "base_url": ""
+            },
+            "claude": {
+                "model": "claude-3-5-sonnet-20241022",
                 "base_url": ""
             },
             "ollama": {

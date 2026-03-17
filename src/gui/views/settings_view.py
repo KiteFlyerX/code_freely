@@ -1,19 +1,19 @@
 """
 设置视图
-应用配置界面
+应用配置界面 - 使用标签页分离基本信息和 AI 配置
 """
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QScrollArea, QFrame, QListWidget, QListWidgetItem,
-    QDialog, QLabel
+    QDialog, QLabel, QTabWidget
 )
 from qfluentwidgets import (
     PushButton, PrimaryPushButton, LineEdit,
     ComboBox, CheckBox, BodyLabel, StrongBodyLabel,
     SubtitleLabel, CardWidget, SimpleCardWidget,
     InfoBar, InfoBarPosition, FluentIcon,
-    MessageBox
+    MessageBox, PillPushButton, SegmentedWidget
 )
 
 from ...services import (
@@ -26,12 +26,12 @@ from ...database import init_database
 
 
 class ProviderConfigDialog(QDialog):
-    """提供商配置对话框 - 使用标准 QDialog 避免 qfluentwidgets API 兼容问题"""
+    """提供商配置对话框"""
 
     def __init__(self, preset: ProviderPreset = None, parent=None):
         super().__init__(parent)
         self.preset = preset
-        self._is_edit_mode = False  # 标记是否为编辑模式
+        self._is_edit_mode = False
         self._setup_ui()
         self._load_preset()
 
@@ -54,11 +54,11 @@ class ProviderConfigDialog(QDialog):
         self.name_edit.setPlaceholderText("提供商名称")
         grid.addWidget(self.name_edit, 0, 1)
 
-        # ID (编辑时禁用)
+        # ID
         grid.addWidget(BodyLabel("ID:"), 1, 0)
         self.id_edit = LineEdit()
         self.id_edit.setPlaceholderText("唯一标识符")
-        self.id_edit.setEnabled(False)  # ID 不允许修改
+        self.id_edit.setEnabled(False)
         grid.addWidget(self.id_edit, 1, 1)
 
         # API 密钥
@@ -82,33 +82,28 @@ class ProviderConfigDialog(QDialog):
         # 端点
         grid.addWidget(BodyLabel("API 端点:"), 3, 0)
         self.endpoint_edit = LineEdit()
-        self.endpoint_edit.setPlaceholderText("https://api.example.com (可选，留空使用默认)")
+        self.endpoint_edit.setPlaceholderText("https://api.example.com (可选)")
         grid.addWidget(self.endpoint_edit, 3, 1)
 
-        # 添加提示标签
-        endpoint_hint = BodyLabel("自定义 API 请求地址（用于中转服务）")
-        endpoint_hint.setStyleSheet("color: #888; font-size: 10px;")
-        grid.addWidget(endpoint_hint, 4, 1)
-
         # 模型
-        grid.addWidget(BodyLabel("模型:"), 5, 0)
+        grid.addWidget(BodyLabel("模型:"), 4, 0)
         self.model_edit = LineEdit()
         self.model_edit.setPlaceholderText("模型名称")
-        grid.addWidget(self.model_edit, 5, 1)
+        grid.addWidget(self.model_edit, 4, 1)
 
         # 温度
-        grid.addWidget(BodyLabel("温度:"), 6, 0)
+        grid.addWidget(BodyLabel("温度:"), 5, 0)
         self.temp_combo = ComboBox()
         self.temp_combo.addItems(["0.0", "0.3", "0.5", "0.7", "1.0"])
         self.temp_combo.setCurrentText("0.7")
-        grid.addWidget(self.temp_combo, 6, 1)
+        grid.addWidget(self.temp_combo, 5, 1)
 
         # 最大 Tokens
-        grid.addWidget(BodyLabel("最大 Tokens:"), 7, 0)
+        grid.addWidget(BodyLabel("最大 Tokens:"), 6, 0)
         self.max_tokens_combo = ComboBox()
         self.max_tokens_combo.addItems(["1024", "2048", "4096", "8192", "16384"])
         self.max_tokens_combo.setCurrentText("4096")
-        grid.addWidget(self.max_tokens_combo, 7, 1)
+        grid.addWidget(self.max_tokens_combo, 6, 1)
 
         layout.addLayout(grid)
 
@@ -146,8 +141,6 @@ class ProviderConfigDialog(QDialog):
         self.model_edit.setText(config.model)
         self.temp_combo.setCurrentText(str(config.temperature))
         self.max_tokens_combo.setCurrentText(str(config.max_tokens))
-
-        # 编辑模式下提示 ID 不可修改
         self.setWindowTitle("编辑提供商配置")
 
     def _on_toggle_key_visibility(self, checked: bool):
@@ -226,7 +219,7 @@ class ProviderConfigDialog(QDialog):
 
 
 class PresetImportDialog(QDialog):
-    """预设导入对话框 - 使用标准 QDialog 避免 qfluentwidgets API 兼容问题"""
+    """预设导入对话框"""
 
     preset_selected = Signal(str)
 
@@ -266,21 +259,17 @@ class PresetImportDialog(QDialog):
 
     def _load_presets(self):
         """加载预设列表"""
-        # 按类别分组
         categories = {}
         for preset in PROVIDER_PRESETS:
             if preset.category not in categories:
                 categories[preset.category] = []
             categories[preset.category].append(preset)
 
-        # 添加到列表
         for category, presets in categories.items():
-            # 添加类别标题
             category_item = QListWidgetItem(f"--- {category.upper()} ---")
             category_item.setFlags(Qt.NoItemFlags)
             self.preset_list.addItem(category_item)
 
-            # 添加预设
             for preset in presets:
                 item = QListWidgetItem(f"{preset.name} ({preset.id})")
                 item.setData(Qt.UserRole, preset.id)
@@ -295,8 +284,8 @@ class PresetImportDialog(QDialog):
             self.accept()
 
 
-class SettingsView(QWidget):
-    """设置视图"""
+class BasicInfoView(QWidget):
+    """基本信息视图"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -310,7 +299,162 @@ class SettingsView(QWidget):
         layout.setSpacing(16)
 
         # 标题
-        title = SubtitleLabel("设置")
+        title = SubtitleLabel("基本信息")
+        layout.addWidget(title)
+
+        # 滚动区域
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setSpacing(16)
+
+        # 应用配置卡片
+        app_card = self._create_app_config_card()
+        container_layout.addWidget(app_card)
+
+        # 关于卡片
+        about_card = self._create_about_card()
+        container_layout.addWidget(about_card)
+
+        container_layout.addStretch()
+
+        scroll.setWidget(container)
+        layout.addWidget(scroll)
+
+    def _create_app_config_card(self) -> CardWidget:
+        """创建应用配置卡片"""
+        card = CardWidget()
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        # 标题
+        title = StrongBodyLabel("应用配置")
+        layout.addWidget(title)
+
+        # 网格布局
+        grid = QGridLayout()
+        grid.setSpacing(12)
+
+        # 自动提交
+        grid.addWidget(BodyLabel("自动提交:"), 0, 0)
+        self.auto_commit_switch = CheckBox()
+        grid.addWidget(self.auto_commit_switch, 0, 1)
+
+        # 创建临时分支
+        grid.addWidget(BodyLabel("创建临时分支:"), 1, 0)
+        self.temp_branch_switch = CheckBox()
+        grid.addWidget(self.temp_branch_switch, 1, 1)
+
+        # 主题
+        grid.addWidget(BodyLabel("主题:"), 2, 0)
+        self.theme_combo = ComboBox()
+        self.theme_combo.addItems(["auto", "light", "dark"])
+        grid.addWidget(self.theme_combo, 2, 1)
+
+        layout.addLayout(grid)
+
+        return card
+
+    def _create_about_card(self) -> CardWidget:
+        """创建关于卡片"""
+        card = CardWidget()
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
+
+        # 标题
+        title = StrongBodyLabel("关于 CodeTraceAI")
+        layout.addWidget(title)
+
+        # 版本信息
+        layout.addWidget(BodyLabel("版本: 0.1.0"))
+        layout.addWidget(BodyLabel("AI 编程辅助与知识沉淀工具"))
+
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        save_btn = PrimaryPushButton("保存设置")
+        save_btn.clicked.connect(self._save_config)
+        button_layout.addWidget(save_btn)
+
+        restart_btn = PushButton("重启应用")
+        restart_btn.clicked.connect(self._restart_application)
+        button_layout.addWidget(restart_btn)
+
+        layout.addLayout(button_layout)
+
+        return card
+
+    def _load_config(self):
+        """加载配置"""
+        cfg = config_service.get_config()
+        self.auto_commit_switch.setChecked(cfg.auto_commit)
+        self.temp_branch_switch.setChecked(cfg.create_temp_branch)
+        self.theme_combo.setCurrentText(cfg.theme)
+
+    def _save_config(self):
+        """保存配置"""
+        config_service.update_app_config(
+            auto_commit=self.auto_commit_switch.isChecked(),
+            create_temp_branch=self.temp_branch_switch.isChecked(),
+            theme=self.theme_combo.currentText(),
+        )
+
+        InfoBar.success(
+            title="设置已保存",
+            content="配置已更新",
+            orient=Qt.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=2000,
+            parent=self
+        )
+
+    def _restart_application(self):
+        """重启应用程序"""
+        InfoBar.info(
+            title="正在重启",
+            content="应用即将关闭并重新启动...",
+            orient=Qt.Horizontal,
+            isClosable=False,
+            position=InfoBarPosition.TOP,
+            duration=2000,
+            parent=self
+        )
+
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(1000, self._perform_restart)
+
+    def _perform_restart(self):
+        """执行重启操作"""
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        app.closeAllWindows()
+        self._save_config()
+        app.exit(133)
+
+
+class AIConfigView(QWidget):
+    """AI 配置视图"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._setup_ui()
+        self._load_config()
+
+    def _setup_ui(self):
+        """设置界面"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
+
+        # 标题
+        title = SubtitleLabel("AI 配置")
         layout.addWidget(title)
 
         # 滚动区域
@@ -326,17 +470,9 @@ class SettingsView(QWidget):
         provider_card = self._create_provider_card()
         container_layout.addWidget(provider_card)
 
-        # AI 配置卡片
+        # 快速 AI 配置卡片
         ai_card = self._create_ai_config_card()
         container_layout.addWidget(ai_card)
-
-        # 应用配置卡片
-        app_card = self._create_app_config_card()
-        container_layout.addWidget(app_card)
-
-        # 关于卡片
-        about_card = self._create_about_card()
-        container_layout.addWidget(about_card)
 
         container_layout.addStretch()
 
@@ -405,7 +541,7 @@ class SettingsView(QWidget):
         return card
 
     def _create_ai_config_card(self) -> CardWidget:
-        """创建 AI 配置卡片"""
+        """创建快速 AI 配置卡片"""
         card = CardWidget()
         layout = QVBoxLayout(card)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -480,73 +616,6 @@ class SettingsView(QWidget):
 
         return card
 
-    def _create_app_config_card(self) -> CardWidget:
-        """创建应用配置卡片"""
-        card = CardWidget()
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
-
-        # 标题
-        title = StrongBodyLabel("应用配置")
-        layout.addWidget(title)
-
-        # 网格布局
-        grid = QGridLayout()
-        grid.setSpacing(12)
-
-        # 自动提交
-        grid.addWidget(BodyLabel("自动提交:"), 0, 0)
-        self.auto_commit_switch = CheckBox()
-        grid.addWidget(self.auto_commit_switch, 0, 1)
-
-        # 创建临时分支
-        grid.addWidget(BodyLabel("创建临时分支:"), 1, 0)
-        self.temp_branch_switch = CheckBox()
-        grid.addWidget(self.temp_branch_switch, 1, 1)
-
-        # 主题
-        grid.addWidget(BodyLabel("主题:"), 2, 0)
-        self.theme_combo = ComboBox()
-        self.theme_combo.addItems(["auto", "light", "dark"])
-        grid.addWidget(self.theme_combo, 2, 1)
-
-        layout.addLayout(grid)
-
-        return card
-
-    def _create_about_card(self) -> CardWidget:
-        """创建关于卡片"""
-        card = CardWidget()
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(8)
-
-        # 标题
-        title = StrongBodyLabel("关于 CodeTraceAI")
-        layout.addWidget(title)
-
-        # 版本信息
-        layout.addWidget(BodyLabel("版本: 0.1.0"))
-        layout.addWidget(BodyLabel("AI 编程辅助与知识沉淀工具"))
-
-        # 按钮布局
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-
-        save_btn = PrimaryPushButton("保存设置")
-        save_btn.clicked.connect(self._save_config)
-        button_layout.addWidget(save_btn)
-
-        # 添加重启按钮
-        restart_btn = PushButton("重启应用")
-        restart_btn.clicked.connect(self._restart_application)
-        button_layout.addWidget(restart_btn)
-
-        layout.addLayout(button_layout)
-
-        return card
-
     def _load_config(self):
         """加载配置"""
         cfg = config_service.get_config()
@@ -557,11 +626,6 @@ class SettingsView(QWidget):
         self.api_key_edit.setText(cfg.ai.api_key)
         self.temperature_spin.setCurrentText(str(cfg.ai.temperature))
         self.max_tokens_spin.setCurrentText(str(cfg.ai.max_tokens))
-
-        # 应用配置
-        self.auto_commit_switch.setChecked(cfg.auto_commit)
-        self.temp_branch_switch.setChecked(cfg.create_temp_branch)
-        self.theme_combo.setCurrentText(cfg.theme)
 
         # 加载提供商列表
         self._load_providers()
@@ -589,7 +653,6 @@ class SettingsView(QWidget):
 
     def _save_config(self):
         """保存配置"""
-        # AI 配置
         config_service.update_ai_config(
             provider=self.provider_combo.currentText(),
             model=self.model_combo.currentText(),
@@ -598,16 +661,9 @@ class SettingsView(QWidget):
             max_tokens=int(self.max_tokens_spin.currentText()),
         )
 
-        # 应用配置
-        config_service.update_app_config(
-            auto_commit=self.auto_commit_switch.isChecked(),
-            create_temp_branch=self.temp_branch_switch.isChecked(),
-            theme=self.theme_combo.currentText(),
-        )
-
         InfoBar.success(
             title="设置已保存",
-            content="配置已更新",
+            content="AI 配置已更新",
             orient=Qt.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
@@ -615,48 +671,10 @@ class SettingsView(QWidget):
             parent=self
         )
 
-    def _restart_application(self):
-        """重启应用程序"""
-        from PySide6.QtWidgets import QApplication
-        import sys
-
-        # 显示提示信息
-        InfoBar.info(
-            title="正在重启",
-            content="应用即将关闭并重新启动...",
-            orient=Qt.Horizontal,
-            isClosable=False,
-            position=InfoBarPosition.TOP,
-            duration=2000,
-            parent=self
-        )
-
-        # 延迟执行重启，让提示信息显示出来
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(1000, self._perform_restart)
-
-    def _perform_restart(self):
-        """执行重启操作"""
-        from PySide6.QtWidgets import QApplication
-        import sys
-        import os
-
-        # 获取当前应用程序实例
-        app = QApplication.instance()
-
-        # 关闭所有窗口
-        app.closeAllWindows()
-
-        # 保存配置
-        self._save_config()
-
-        # 退出应用（返回码 133 表示需要重启）
-        app.exit(133)
-
     # === 提供商管理相关方法 ===
 
     def _on_provider_selected(self, item):
-        """提供商选择处理（单击）"""
+        """提供商选择处理"""
         provider_id = item.data(Qt.UserRole)
         if not provider_id:
             return
@@ -665,21 +683,17 @@ class SettingsView(QWidget):
         provider = next((p for p in providers if p.id == provider_id), None)
 
         if provider:
-            # 显示详情
             info_text = f"ID: {provider.id} | 类型: {provider.provider_type.value} | 模型: {provider.model}"
-
             masked_key = provider.api_key[:8] + "..." if len(provider.api_key) > 8 else "***"
             info_text += f" | API密钥: {masked_key}"
-
             self.detail_info.setText(info_text)
 
-            # 启用按钮
             self.switch_btn.setEnabled(not provider.is_active)
             self.edit_btn.setEnabled(True)
             self.delete_btn.setEnabled(not provider.is_active)
 
     def _on_provider_double_clicked(self, item):
-        """提供商双击处理（双击直接编辑）"""
+        """提供商双击处理"""
         provider_id = item.data(Qt.UserRole)
         if not provider_id:
             return
@@ -688,7 +702,6 @@ class SettingsView(QWidget):
         provider = next((p for p in providers if p.id == provider_id), None)
 
         if provider:
-            # 创建预设对象以重用对话框
             preset = ProviderPreset(
                 id=provider.id,
                 name=provider.name,
@@ -698,7 +711,6 @@ class SettingsView(QWidget):
             )
 
             dialog = ProviderConfigDialog(preset, self)
-            # 使用 set_config 方法填充所有字段
             dialog.set_config(provider)
 
             if dialog.exec() == QDialog.Accepted:
@@ -714,7 +726,6 @@ class SettingsView(QWidget):
                         parent=self
                     )
                     self._load_providers()
-                    # 更新详情显示
                     self._on_provider_selected(self.provider_list.currentItem())
                 else:
                     InfoBar.error(
@@ -809,7 +820,6 @@ class SettingsView(QWidget):
         provider = next((p for p in providers if p.id == provider_id), None)
 
         if provider:
-            # 创建预设对象以重用对话框
             preset = ProviderPreset(
                 id=provider.id,
                 name=provider.name,
@@ -819,7 +829,6 @@ class SettingsView(QWidget):
             )
 
             dialog = ProviderConfigDialog(preset, self)
-            # 使用 set_config 方法填充所有字段
             dialog.set_config(provider)
 
             if dialog.exec() == QDialog.Accepted:
@@ -835,7 +844,6 @@ class SettingsView(QWidget):
                         parent=self
                     )
                     self._load_providers()
-                    # 更新详情显示
                     self._on_provider_selected(self.provider_list.currentItem())
                 else:
                     InfoBar.error(
@@ -856,7 +864,6 @@ class SettingsView(QWidget):
 
         provider_id = current.data(Qt.UserRole)
 
-        # 确认对话框
         msg_box = MessageBox("确认删除", "确定要删除此提供商吗？", self)
         if msg_box.exec():
             if provider_manager.delete_provider(provider_id):
@@ -958,14 +965,13 @@ class SettingsView(QWidget):
 
     def _on_provider_changed(self, provider: str):
         """提供商变化处理"""
-        # 根据提供商更新模型列表
         self.model_combo.clear()
 
         if provider == "claude":
             models = ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"]
         elif provider == "openai":
             models = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"]
-        else:  # deepseek
+        else:
             models = ["deepseek-chat", "deepseek-coder", "deepseek-reasoner"]
 
         self.model_combo.addItems(models)
@@ -981,7 +987,6 @@ class SettingsView(QWidget):
 
     def _validate_api_key(self):
         """验证 API 密钥"""
-        # 临时保存当前密钥
         current_key = self.api_key_edit.text()
         if current_key:
             config_service.save_api_key(
@@ -989,7 +994,6 @@ class SettingsView(QWidget):
                 current_key
             )
 
-        # 验证
         is_valid = conversation_service.validate_api_key()
 
         if is_valid:
@@ -1012,3 +1016,55 @@ class SettingsView(QWidget):
                 duration=5000,
                 parent=self
             )
+
+
+class SettingsView(QWidget):
+    """设置视图 - 使用标签页分离基本信息和 AI 配置"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        """设置界面"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
+
+        # 标题
+        title = SubtitleLabel("设置")
+        layout.addWidget(title)
+
+        # 使用 SegmentedWidget 作为标签切换器
+        self.segmented_widget = SegmentedWidget()
+        self.segmented_widget.addItem("basic", "基本信息")
+        self.segmented_widget.addItem("ai", "AI 配置")
+        self.segmented_widget.setCurrentItem("basic")
+        self.segmented_widget.currentItemChanged.connect(self._on_tab_changed)
+        layout.addWidget(self.segmented_widget)
+
+        # 内容区域
+        self.content_stack = QTabWidget()
+        self.content_stack.setTabBarAutoHide(True)
+        self.content_stack.tabBar().hide()  # 隐藏默认的标签栏
+
+        # 创建两个视图
+        self.basic_info_view = BasicInfoView()
+        self.ai_config_view = AIConfigView()
+
+        self.content_stack.addTab(self.basic_info_view, "基本信息")
+        self.content_stack.addTab(self.ai_config_view, "AI 配置")
+
+        # 默认显示第一个标签
+        self.content_stack.setCurrentIndex(0)
+
+        layout.addWidget(self.content_stack)
+
+    def _on_tab_changed(self, item_key: str):
+        """标签切换处理"""
+        if item_key == "basic":
+            self.content_stack.setCurrentIndex(0)
+        elif item_key == "ai":
+            self.content_stack.setCurrentIndex(1)
+            # 切换到 AI 配置时重新加载提供商列表
+            self.ai_config_view._load_providers()

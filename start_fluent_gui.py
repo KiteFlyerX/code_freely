@@ -383,7 +383,7 @@ class ChatWidget(QWidget):
                         chunk = result.get("content", "")
                         # 移动光标到末尾并插入文本
                         cursor = self.chat_area.textCursor()
-                        cursor.movePosition(cursor.End)
+                        cursor.movePosition(QTextCursor.End)
                         self.chat_area.setTextCursor(cursor)
                         self.chat_area.insertPlainText(chunk)
                     elif result.get("status") == "error":

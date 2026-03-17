@@ -335,6 +335,7 @@ class ChatWidget(QWidget):
         # 使用线程处理
         import queue
         import threading
+        import asyncio
         result_queue = queue.Queue()
 
         def run_chat():
@@ -342,11 +343,23 @@ class ChatWidget(QWidget):
                 if self.chat_conversation_id is None:
                     self.chat_conversation_id = conversation_service.create_conversation("新对话")
 
-                full_response = ""
-                for chunk in conversation_service.send_message_with_tools_stream(
-                    self.chat_conversation_id, content, self.current_work_dir
-                ):
-                    full_response += chunk
+                # 在新的事件循环中运行异步生成器
+                async def collect_response():
+                    full_response = ""
+                    async for chunk in conversation_service.send_message_with_tools_stream(
+                        self.chat_conversation_id, content, self.current_work_dir
+                    ):
+                        full_response += chunk
+                    return full_response
+
+                # 创建新的事件循环并运行
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    full_response = loop.run_until_complete(collect_response())
+                finally:
+                    loop.run_until_complete(loop.shutdown_asyncgens())
+                    loop.close()
 
                 result_queue.put({"status": "success", "content": full_response})
             except Exception as e:

@@ -173,6 +173,8 @@ class ChatWidget(QWidget):
         self.chat_input = PlainTextEdit()
         self.chat_input.setPlaceholderText("输入你的问题... (Enter 发送, Shift+Enter 换行)")
         self.chat_input.setMaximumHeight(120)
+        # 安装事件过滤器处理回车键
+        self.chat_input.installEventFilter(self)
         input_layout.addWidget(self.chat_input)
 
         # 底部按钮区域

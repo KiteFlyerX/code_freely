@@ -402,27 +402,40 @@ class ChatWidget(QWidget):
     def _update_token_stats(self):
         """更新 token 统计"""
         try:
-            if not self.chat_conversation_id:
-                return
-
-            from src.database.repositories import MessageRepository
+            from src.database.repositories import MessageRepository, ConversationRepository
             from src.database import get_db_session
 
             msg_repo = MessageRepository(get_db_session())
-            messages = msg_repo.get_by_conversation(self.chat_conversation_id)
+            conv_repo = ConversationRepository(get_db_session())
 
-            total_input = sum(m.input_tokens or 0 for m in messages)
-            total_output = sum(m.output_tokens or 0 for m in messages)
-            total_tokens = sum(m.total_tokens or 0 for m in messages)
-            max_context = max((m.context_length or 0 for m in messages), default=0)
+            # 当前对话的token统计
+            if self.chat_conversation_id:
+                messages = msg_repo.get_by_conversation(self.chat_conversation_id)
+                total_input = sum(m.input_tokens or 0 for m in messages)
+                total_output = sum(m.output_tokens or 0 for m in messages)
+                total_tokens = sum(m.total_tokens or 0 for m in messages)
+                max_context = max((m.context_length or 0 for m in messages), default=0)
+            else:
+                total_input = total_output = total_tokens = 0
+                max_context = 0
+
+            # 所有对话的总token统计
+            all_conversations = conv_repo.get_all()
+            all_messages = []
+            for conv in all_conversations:
+                all_messages.extend(msg_repo.get_by_conversation(conv.id))
+
+            total_input_all = sum(m.input_tokens or 0 for m in all_messages)
+            total_output_all = sum(m.output_tokens or 0 for m in all_messages)
+            total_tokens_all = sum(m.total_tokens or 0 for m in all_messages)
 
             if total_tokens > 0:
                 self.token_stats_label.setText(
-                    f"Tokens: {total_tokens:,} (入: {total_input:,}, 出: {total_output:,}) | 上下文: {max_context}"
+                    f"Tokens: {total_tokens:,} (入: {total_input:,}, 出: {total_output:,}) | 总计: {total_tokens_all:,} | 上下文: {max_context}"
                 )
                 self.token_stats_label.setStyleSheet("color: #10b981; font-size: 11px;")
             else:
-                self.token_stats_label.setText(f"上下文: {max_context} 消息")
+                self.token_stats_label.setText(f"Tokens: - | 总计: {total_tokens_all:,} | 上下文: {max_context}")
                 self.token_stats_label.setStyleSheet("color: #888; font-size: 11px;")
         except Exception as e:
             print(f"Token stats error: {e}")

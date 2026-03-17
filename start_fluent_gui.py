@@ -99,6 +99,10 @@ class ChatWidget(QWidget):
         self.setObjectName("chatWidget")
         self.chat_conversation_id = None
         self._is_processing = False
+
+        # 当前工作目录
+        self.current_work_dir = Path.cwd()
+
         self._setup_ui()
 
     def _setup_ui(self):
@@ -112,9 +116,23 @@ class ChatWidget(QWidget):
         toolbar_layout = QHBoxLayout(toolbar_card)
         toolbar_layout.setContentsMargins(16, 12, 16, 12)
 
-        # 提供商状态
-        toolbar_layout.addWidget(StrongBodyLabel("AI 对话"))
+        # 工作目录显示和切换
+        toolbar_layout.addWidget(StrongBodyLabel("工作目录:"))
+        self.work_dir_label = BodyLabel(self._get_work_dir_display())
+        self.work_dir_label.setStyleSheet("color: #666; font-size: 11px;")
+        self.work_dir_label.setMaximumWidth(300)
+        self.work_dir_label.setToolTip(str(self.current_work_dir))
+        toolbar_layout.addWidget(self.work_dir_label)
+
+        change_dir_btn = PushButton("切换")
+        change_dir_btn.setFixedWidth(60)
+        change_dir_btn.clicked.connect(self._change_work_directory)
+        toolbar_layout.addWidget(change_dir_btn)
+
         toolbar_layout.addWidget(BodyLabel("|"))
+
+        # 提供商状态
+        toolbar_layout.addWidget(StrongBodyLabel("AI:"))
         self.chat_status_label = BodyLabel("未配置提供商")
         self.chat_status_label.setStyleSheet("color: orange;")
         toolbar_layout.addWidget(self.chat_status_label)
@@ -208,6 +226,64 @@ class ChatWidget(QWidget):
             self.chat_status_label.setText(f"配置错误: {e}")
             self.chat_status_label.setStyleSheet("color: red;")
 
+    def _get_work_dir_display(self):
+        """获取工作目录显示文本"""
+        try:
+            cwd = self.current_work_dir
+            home = Path.home()
+
+            if cwd.is_relative_to(home):
+                return f"~/{cwd.relative_to(home)}"
+            else:
+                path_str = str(cwd)
+                if len(path_str) > 40:
+                    return "..." + path_str[-37:]
+                return path_str
+        except Exception as e:
+            return str(self.current_work_dir)
+
+    def _update_work_dir_display(self):
+        """更新工作目录显示"""
+        self.work_dir_label.setText(self._get_work_dir_display())
+        self.work_dir_label.setToolTip(str(self.current_work_dir))
+
+    def _change_work_directory(self):
+        """切换工作目录"""
+        from PySide6.QtWidgets import QFileDialog
+
+        new_dir = QFileDialog.getExistingDirectory(
+            self,
+            "选择工作目录",
+            str(self.current_work_dir)
+        )
+
+        if new_dir:
+            try:
+                new_path = Path(new_dir)
+                os.chdir(new_path)
+                self.current_work_dir = new_path
+                self._update_work_dir_display()
+
+                InfoBar.success(
+                    title="目录已切换",
+                    content=f"工作目录: {self._get_work_dir_display()}",
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self
+                )
+            except Exception as e:
+                InfoBar.error(
+                    title="切换失败",
+                    content=str(e),
+                    orient=Qt.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=5000,
+                    parent=self
+                )
+
     def _on_new_chat(self):
         """新建对话"""
         try:
@@ -268,7 +344,7 @@ class ChatWidget(QWidget):
 
                 full_response = ""
                 for chunk in conversation_service.send_message_with_tools_stream(
-                    self.chat_conversation_id, content, Path.cwd()
+                    self.chat_conversation_id, content, self.current_work_dir
                 ):
                     full_response += chunk
 

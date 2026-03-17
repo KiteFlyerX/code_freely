@@ -267,14 +267,43 @@ class MainWindow(FluentWindow):
 def run_gui():
     """运行 GUI 应用"""
     import sys
+    import locale
+
+    # 确保使用 UTF-8 编码
+    try:
+        if sys.platform.startswith('win'):
+            # Windows 系统
+            import codecs
+            import sys
+            sys.stdout.reconfigure(encoding='utf-8')
+            sys.stderr.reconfigure(encoding='utf-8')
+            
+            # 设置控制台代码页为 UTF-8
+            import locale
+            import ctypes
+            ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+            
+        # 设置默认编码
+        if hasattr(sys, 'set_int_max_str_digits'):
+            sys.set_int_max_str_digits(0)
+            
+    except Exception as e:
+        print(f"编码设置警告: {e}")
 
     # 确保没有已经存在的 QApplication 实例
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)
 
+    # 设置应用程序元数据
     app.setApplicationName("CodeTraceAI")
     app.setOrganizationName("CodeTraceAI")
+    
+    # 设置字体以支持中文
+    from PySide6.QtGui import QFontDatabase
+    font = app.font()
+    font.setPointSize(10)
+    app.setFont(font)
 
     window = MainWindow()
     window.show()

@@ -20,7 +20,9 @@ from qfluentwidgets import (
 import os
 import json
 
-from ...services import config_service, provider_manager, get_ai_client
+from ...services import config_service, provider_manager
+from ...services.provider_service import ProviderConfig, ProviderType
+from ...services.ai_client_factory import create_ai_client
 
 
 class SettingsView(QWidget):
@@ -390,11 +392,24 @@ class SettingsView(QWidget):
             self.api_key_input.setEchoMode(QLineEdit.Password)
             self.api_key_show_btn.setText("显示")
     
+    def _get_provider_type(self, provider: str) -> ProviderType:
+        """将提供商字符串转换为 ProviderType"""
+        provider_map = {
+            "claude": ProviderType.CLAUDE,
+            "anthropic": ProviderType.CLAUDE,
+            "openai": ProviderType.OPENAI,
+            "deepseek": ProviderType.DEEPSEEK,
+            "ollama": ProviderType.CUSTOM,
+            "openrouter": ProviderType.CUSTOM
+        }
+        return provider_map.get(provider.lower(), ProviderType.CUSTOM)
+    
     def _validate_api_key(self):
         """验证 API 密钥"""
         api_key = self.api_key_input.text().strip()
         provider = self.provider_combo.currentText()
         base_url = self.base_url_input.text().strip()
+        model = self.model_input.text().strip()
         
         if not api_key:
             self.validation_result.setText("❌ 请输入 API 密钥")
@@ -406,22 +421,35 @@ class SettingsView(QWidget):
             )
             return
         
+        if not model:
+            self.validation_result.setText("❌ 请输入模型名称")
+            InfoBar.error(
+                title="验证失败",
+                content="请输入模型名称",
+                parent=self,
+                position=InfoBarPosition.TOP
+            )
+            return
+        
         self.validation_result.setText("⏳ 正在验证...")
         
         try:
-            # 构建临时配置
-            temp_config = {
-                "api_key": api_key,
-                "model": self.model_input.text().strip() or "test",
-                "max_tokens": 10,
-                "temperature": self.temperature_input.value() / 10.0
-            }
+            # 构建 ProviderConfig
+            provider_type = self._get_provider_type(provider)
             
-            if base_url:
-                temp_config["base_url"] = base_url
+            config = ProviderConfig(
+                id="temp_validation",
+                name=f"{provider} (验证)",
+                provider_type=provider_type,
+                api_key=api_key,
+                api_endpoint=base_url,
+                model=model,
+                max_tokens=10,  # 验证时使用很小的值
+                temperature=self.temperature_input.value() / 10.0
+            )
             
-            # 使用 get_ai_client 函数创建客户端
-            client = get_ai_client(provider, temp_config)
+            # 使用工厂创建客户端
+            client = create_ai_client(config)
             
             # 尝试发送测试请求
             try:

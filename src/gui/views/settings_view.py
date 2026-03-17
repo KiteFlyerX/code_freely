@@ -403,11 +403,12 @@ class AIConfigView(QWidget):
         """加载配置"""
         cfg = config_service.get_config()
 
-        self.provider_edit.setText(cfg.provider)
-        self.model_edit.setText(cfg.model)
-        self.api_key_edit.setText(cfg.api_key)
-        self.temperature_edit.setText(str(cfg.temperature))
-        self.max_tokens_edit.setText(str(cfg.max_tokens))
+        # AI 配置在 cfg.ai 中
+        self.provider_edit.setText(cfg.ai.provider)
+        self.model_edit.setText(cfg.ai.model)
+        self.api_key_edit.setText(cfg.ai.api_key)
+        self.temperature_edit.setText(str(cfg.ai.temperature))
+        self.max_tokens_edit.setText(str(cfg.ai.max_tokens))
 
     def _save_config(self):
         """保存配置"""
@@ -484,7 +485,7 @@ class AIConfigView(QWidget):
             )
             return
 
-        # 保存配置
+        # 保存配置 - 使用 update_ai_config
         config_service.update_ai_config(
             provider=provider,
             model=model,

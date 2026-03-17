@@ -641,13 +641,21 @@ class ConversationService:
             yield chunk
 
         # 保存 AI 响应
-        # 流式响应暂时无法获取详细 token 统计，只保存上下文长度
+        # 获取 token 统计
+        usage = ai_client.get_last_usage()
+        input_tokens = usage.get("input_tokens") if usage else None
+        output_tokens = usage.get("output_tokens") if usage else None
+        total_tokens = usage.get("total_tokens") if usage else None
         context_length = len(messages)
+
         self._message_repo.create(
             conversation_id=conversation_id,
             role=MessageRole.ASSISTANT.value,
             content=full_response,
             model=ai_client.model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
             context_length=context_length,
         )
 
@@ -807,12 +815,22 @@ class ConversationService:
             max_iterations=10,
         )
 
-        # 保存 AI 响应
+        # 保存 AI 响应，获取 token 统计
+        usage = response.usage if response.usage else ai_client.get_last_usage()
+        input_tokens = usage.get("input_tokens") if usage else None
+        output_tokens = usage.get("output_tokens") if usage else None
+        total_tokens = usage.get("total_tokens") if usage else None
+        context_length = len(messages)
+
         self._message_repo.create(
             conversation_id=conversation_id,
             role=MessageRole.ASSISTANT.value,
             content=response.content,
             model=response.model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            context_length=context_length,
         )
 
         yield response.content
@@ -888,12 +906,22 @@ class ConversationService:
             full_response += chunk
             yield chunk
 
-        # 保存 AI 响应
+        # 保存 AI 响应，获取 token 统计
+        usage = ai_client.get_last_usage()
+        input_tokens = usage.get("input_tokens") if usage else None
+        output_tokens = usage.get("output_tokens") if usage else None
+        total_tokens = usage.get("total_tokens") if usage else None
+        context_length = len(messages)
+
         self._message_repo.create(
             conversation_id=conversation_id,
             role=MessageRole.ASSISTANT.value,
             content=full_response,
             model=ai_client.model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            context_length=context_length,
         )
 
     def apply_code_change(

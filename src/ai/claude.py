@@ -180,6 +180,13 @@ class ClaudeAI(BaseAI):
                         arguments=block.input,
                     ))
 
+            usage_info = {
+                "input_tokens": response.usage.input_tokens,
+                "output_tokens": response.usage.output_tokens,
+                "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
+            }
+            self._set_last_usage(usage_info)
+
             return AIResponse(
                 content=content,
                 model=response.model,
@@ -234,18 +241,33 @@ class ClaudeAI(BaseAI):
         if config.extra_params:
             request_params.update(config.extra_params)
 
+        # 用于收集 usage 信息
+        usage_info = {"input_tokens": 0, "output_tokens": 0}
+
         try:
             stream = await self.async_client.messages.create(**request_params)
 
             async for event in stream:
-                if event.type == "content_block_delta":
+                if event.type == "message_start":
+                    if hasattr(event, 'usage') and event.usage:
+                        usage_info["input_tokens"] = event.usage.input_tokens
+
+                elif event.type == "content_block_delta":
                     if hasattr(event.delta, 'text'):
                         yield event.delta.text
+
+                elif event.type == "message_delta":
+                    if hasattr(event, 'usage') and event.usage:
+                        usage_info["output_tokens"] = event.usage.output_tokens
 
         except anthropic.APIError as e:
             raise RuntimeError(f"Claude API 错误: {e}") from e
         except Exception as e:
             raise RuntimeError(f"流式请求失败: {e}") from e
+        finally:
+            # 保存 usage 信息
+            usage_info["total_tokens"] = usage_info.get("input_tokens", 0) + usage_info.get("output_tokens", 0)
+            self._set_last_usage(usage_info)
 
     async def chat_stream_with_tools(
         self,
@@ -285,6 +307,9 @@ class ClaudeAI(BaseAI):
 
         tool_calls = []
         current_tool = None
+
+        # 用于收集 usage 信息
+        usage_info = {"input_tokens": 0, "output_tokens": 0}
 
         async def text_generator():
             nonlocal current_tool
@@ -326,12 +351,76 @@ class ClaudeAI(BaseAI):
                         # 内容块结束
                         current_tool = None
 
+                    elif event.type == "message_delta":
+                        # 消息结束，可能包含 usage 信息
+                        if hasattr(event, 'usage') and event.usage:
+                            if hasattr(event.usage, 'output_tokens'):
+                                usage_info["output_tokens"] = event.usage.output_tokens
+
+                    elif event.type == "message_stop":
+                        # 整个消息流结束，获取最终的 usage
+                        # 注意：Anthropic 的流式响应中，input_tokens 在开始时已知
+                        # output_tokens 在 message_delta 中累计
+                        # 我们需要从响应中获取完整信息
+                        pass
+
             except anthropic.APIError as e:
                 raise RuntimeError(f"Claude API 错误: {e}") from e
             except Exception as e:
                 raise RuntimeError(f"流式请求失败: {e}") from e
 
-        return text_generator(), tool_calls
+        # 保存 usage 信息以便外部访问
+        # 注意：由于流式响应的特性，input_tokens 需要从 API 响应的开头获取
+        # 这里我们创建一个包装器来捕获完整的 usage
+        async def wrapper():
+            # 首先发起请求以获取 input_tokens（在流开始前）
+            nonlocal usage_info
+            try:
+                # 创建一个非流式请求来获取 input_tokens
+                # 由于流式响应的 input_tokens 在响应头中，我们需要特殊处理
+                # 临时方案：使用流式响应，但捕获所有事件
+                stream = await self.async_client.messages.create(**request_params)
+
+                input_tokens = None
+                async for event in stream:
+                    if event.type == "message_start":
+                        if hasattr(event, 'usage') and event.usage:
+                            usage_info["input_tokens"] = event.usage.input_tokens
+
+                    # 同时处理文本生成
+                    if event.type == "content_block_delta":
+                        if event.delta.type == "text_delta":
+                            yield event.delta.text
+                        elif event.delta.type == "input_json_delta":
+                            # 工具调用处理
+                            pass
+
+                    elif event.type == "content_block_start":
+                        if event.content_block.type == "tool_use":
+                            current_tool = ToolCall(
+                                id=event.content_block.id,
+                                name=event.content_block.name,
+                                arguments={}
+                            )
+                            tool_calls.append(current_tool)
+
+                    elif event.type == "content_block_stop":
+                        current_tool = None
+
+                    elif event.type == "message_delta":
+                        if hasattr(event, 'usage') and event.usage:
+                            usage_info["output_tokens"] = event.usage.output_tokens
+
+            except anthropic.APIError as e:
+                raise RuntimeError(f"Claude API 错误: {e}") from e
+            except Exception as e:
+                raise RuntimeError(f"流式请求失败: {e}") from e
+            finally:
+                # 保存最终的 usage 信息
+                usage_info["total_tokens"] = usage_info.get("input_tokens", 0) + usage_info.get("output_tokens", 0)
+                self._set_last_usage(usage_info)
+
+        return wrapper(), tool_calls
 
     async def chat_stream_collect_tools(
         self,

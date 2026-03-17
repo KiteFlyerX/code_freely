@@ -77,6 +77,15 @@ class BaseAI(ABC):
         self.api_key = api_key
         self.model = model
         self.config = kwargs
+        self._last_usage: Optional[Dict[str, int]] = None  # 存储最后一次请求的 usage
+
+    def get_last_usage(self) -> Optional[Dict[str, int]]:
+        """获取最后一次请求的 token 使用信息"""
+        return self._last_usage
+
+    def _set_last_usage(self, usage: Optional[Dict[str, int]]):
+        """设置最后一次请求的 token 使用信息"""
+        self._last_usage = usage
 
     @abstractmethod
     async def chat(
@@ -134,6 +143,9 @@ class BaseAI(ABC):
         # 默认实现：使用非流模式
         response = await self.chat(messages, config)
 
+        # 保存 usage 信息
+        self._set_last_usage(response.usage)
+
         async def text_gen():
             if response.content:
                 yield response.content
@@ -179,9 +191,18 @@ class BaseAI(ABC):
         current_messages = messages.copy()
         iterations = 0
 
+        # 累计 token 使用
+        total_usage = {"input_tokens": 0, "output_tokens": 0}
+
         while iterations < max_iterations:
             # 调用 AI（流式输出，同时收集工具调用）
             text_stream, tool_calls = await self.chat_stream_collect_tools(current_messages, config)
+
+            # 累计本次请求的 token 使用
+            usage = self.get_last_usage()
+            if usage:
+                total_usage["input_tokens"] += usage.get("input_tokens", 0)
+                total_usage["output_tokens"] += usage.get("output_tokens", 0)
 
             # 流式输出文本内容
             full_content = ""
@@ -191,6 +212,9 @@ class BaseAI(ABC):
 
             # 如果没有工具调用，直接返回
             if not tool_calls:
+                # 保存累计的 usage
+                total_usage["total_tokens"] = total_usage["input_tokens"] + total_usage["output_tokens"]
+                self._set_last_usage(total_usage)
                 return
 
             # 添加 AI 响应到消息列表
@@ -293,6 +317,10 @@ class BaseAI(ABC):
 
             iterations += 1
 
+        # 达到最大迭代次数，保存累计的 usage
+        total_usage["total_tokens"] = total_usage["input_tokens"] + total_usage["output_tokens"]
+        self._set_last_usage(total_usage)
+
     async def chat_with_tools(
         self,
         messages: List[Message],
@@ -321,13 +349,28 @@ class BaseAI(ABC):
         current_messages = messages.copy()
         iterations = 0
 
+        # 累计 token 使用
+        total_usage = {"input_tokens": 0, "output_tokens": 0}
+        final_response = None
+
         while iterations < max_iterations:
             # 调用 AI
             response = await self.chat(current_messages, config)
 
+            # 累计本次请求的 token 使用
+            if response.usage:
+                total_usage["input_tokens"] += response.usage.get("input_tokens", 0)
+                total_usage["output_tokens"] += response.usage.get("output_tokens", 0)
+
             # 如果没有工具调用，直接返回
             if not response.tool_calls:
+                # 更新 response 的 usage 为累计值
+                total_usage["total_tokens"] = total_usage["input_tokens"] + total_usage["output_tokens"]
+                response.usage = total_usage
+                self._set_last_usage(total_usage)
                 return response
+
+            final_response = response
 
             # 添加 AI 响应到消息列表
             assistant_message = Message(
@@ -360,7 +403,12 @@ class BaseAI(ABC):
             iterations += 1
 
         # 达到最大迭代次数，返回最后一次响应
-        return response
+        if final_response:
+            # 更新 usage 为累计值
+            total_usage["total_tokens"] = total_usage["input_tokens"] + total_usage["output_tokens"]
+            final_response.usage = total_usage
+            self._set_last_usage(total_usage)
+        return final_response
 
     def get_model_info(self) -> Dict[str, Any]:
         """

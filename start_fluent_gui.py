@@ -679,8 +679,8 @@ class SettingsWidget(QWidget):
         tool_info_layout.addWidget(tool_info_label)
 
         # 工具版本
-        tool_version_label = BodyLabel("工具版本: v1.0.0")
-        tool_version_label.setStyleSheet("""
+        self.tool_version_label = BodyLabel("工具版本: v1.0.0")
+        self.tool_version_label.setStyleSheet("""
             BodyLabel {
                 padding: 8px;
                 background-color: rgba(16, 185, 129, 0.1);
@@ -689,7 +689,7 @@ class SettingsWidget(QWidget):
                 font-weight: bold;
             }
         """)
-        tool_info_layout.addWidget(tool_version_label)
+        tool_info_layout.addWidget(self.tool_version_label)
 
         layout.addWidget(tool_info_card)
         layout.addStretch()
@@ -700,6 +700,15 @@ class SettingsWidget(QWidget):
 
         # 刷新状态
         self._refresh_ccswitch_status()
+        self._refresh_version()
+
+    def _refresh_version(self):
+        """刷新版本号显示"""
+        try:
+            current_version = config_service.get_config().app_version
+            self.tool_version_label.setText(f"工具版本: v{current_version}")
+        except Exception as e:
+            print(f"刷新版本号失败: {e}")
 
     def _refresh_ccswitch_status(self):
         """刷新 CC-Switch 状态"""

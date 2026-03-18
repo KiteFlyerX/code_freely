@@ -239,7 +239,7 @@ class ConversationService:
         提交当前工作目录的所有更改
 
         Args:
-            commit_message: 自定义提交消息，如果为 None 则自动生成
+            commit_message: 自定义提交消息, 如果为 None 则自动生成
             force: 是否强制提交（忽略 auto_commit 配置）
 
         Returns:

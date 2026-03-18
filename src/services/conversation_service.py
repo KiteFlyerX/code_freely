@@ -240,7 +240,7 @@ class ConversationService:
 
         Args:
             commit_message: 自定义提交消息, 如果为 None 则自动生成
-            force: 是否强制提交（忽略 auto_commit 配置）
+            force: 是否强制提交(忽略 auto_commit 配置)
 
         Returns:
             dict: 提交结果，包含 success, commit_id, commit_msg 等信息

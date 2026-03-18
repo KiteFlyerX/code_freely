@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..ai import BaseAI, Message, MessageRole, AIResponse, AIRequestConfig
-from ..database import get_db_session
+from ..database import get_db_session, db_manager
 from ..database.repositories import ConversationRepository, MessageRepository
 from ..models import Conversation as ConversationModel, ConversationMessage as MessageModel
 from .config_service import config_service
@@ -20,17 +20,25 @@ class ConversationService:
     """
     对话服务
     管理 AI 对话、消息存储和代码修改记录
+    
+    重要：不再持有长期的数据库会话，每次操作都创建新会话
     """
 
     def __init__(self):
         self._ai_client: Optional[BaseAI] = None
-        self._conversation_repo = ConversationRepository(get_db_session())
-        self._message_repo = MessageRepository(get_db_session())
         self._current_work_dir: Optional[Path] = None
 
     def set_work_dir(self, work_dir: Path):
         """设置当前工作目录"""
         self._current_work_dir = work_dir
+
+    def _get_conversation_repo(self) -> ConversationRepository:
+        """获取对话仓库（每次创建新会话）"""
+        return ConversationRepository(get_db_session())
+
+    def _get_message_repo(self) -> MessageRepository:
+        """获取消息仓库（每次创建新会话）"""
+        return MessageRepository(get_db_session())
 
     async def _generate_commit_message(self, user_question: str, ai_response: str) -> str:
         """
@@ -118,7 +126,7 @@ class ConversationService:
 4. 只返回一条提交消息，格式如: "fix: 修复用户登录时的验证错误"
 5. 不要加引号，不要有其他内容
 
-提交消息:"""
+提交消息:"
 
             # 调用 AI 生成提交消息
             from ..ai.base import Message, MessageRole, AIRequestConfig
@@ -413,22 +421,40 @@ class ConversationService:
         Returns:
             int: 对话 ID
         """
-        conv = self._conversation_repo.create(title=title, project_path=project_path)
+        # 使用 db_manager.safe_query 来安全处理数据库操作
+        def create_conv(session):
+            repo = ConversationRepository(session)
+            conv = repo.create(title=title, project_path=project_path)
+            return conv
+
+        conv = db_manager.safe_query(create_conv)
         return conv.id
 
     def get_conversation(self, conversation_id: int) -> Optional[ConversationModel]:
         """获取对话"""
-        return self._conversation_repo.get_by_id(conversation_id)
+        def get_conv(session):
+            repo = ConversationRepository(session)
+            return repo.get_by_id(conversation_id)
+        
+        return db_manager.safe_query(get_conv)
 
     def list_conversations(
         self, project_path: Optional[str] = None, limit: int = 50
     ) -> List[ConversationModel]:
         """获取对话列表"""
-        return self._conversation_repo.list_all(limit=limit, project_path=project_path)
+        def list_conv(session):
+            repo = ConversationRepository(session)
+            return repo.list_all(limit=limit, project_path=project_path)
+        
+        return db_manager.safe_query(list_conv) or []
 
     def get_messages(self, conversation_id: int) -> List[MessageModel]:
         """获取对话的消息"""
-        return self._message_repo.get_by_conversation(conversation_id)
+        def get_msgs(session):
+            repo = MessageRepository(session)
+            return repo.get_by_conversation(conversation_id)
+        
+        return db_manager.safe_query(get_msgs) or []
 
     async def send_message(
         self,
@@ -448,14 +474,18 @@ class ConversationService:
             MessageModel: AI 响应消息
         """
         # 保存用户消息
-        user_message = self._message_repo.create(
-            conversation_id=conversation_id,
-            role=MessageRole.USER.value,
-            content=content,
-        )
+        def save_user_msg(session):
+            repo = MessageRepository(session)
+            return repo.create(
+                conversation_id=conversation_id,
+                role=MessageRole.USER.value,
+                content=content,
+            )
+        
+        user_message = db_manager.safe_query(save_user_msg)
 
         # 获取对话历史（不包括刚刚保存的用户消息，手动添加）
-        history = self._message_repo.get_by_conversation(conversation_id)
+        history = self.get_messages(conversation_id)
         # 移除最后一个（刚保存的用户消息），因为我们会手动添加
         history = history[:-1]
 
@@ -519,17 +549,21 @@ class ConversationService:
         total_tokens = response.usage.get("total_tokens") if response.usage else None
         context_length = len(messages)  # 上下文消息数
 
-        ai_message = self._message_repo.create(
-            conversation_id=conversation_id,
-            role=MessageRole.ASSISTANT.value,
-            content=response.content,
-            model=response.model,
-            tokens_used=output_tokens,  # 保留用于兼容
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=total_tokens,
-            context_length=context_length,
-        )
+        def save_ai_msg(session):
+            repo = MessageRepository(session)
+            return repo.create(
+                conversation_id=conversation_id,
+                role=MessageRole.ASSISTANT.value,
+                content=response.content,
+                model=response.model,
+                tokens_used=output_tokens,  # 保留用于兼容
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+                context_length=context_length,
+            )
+        
+        ai_message = db_manager.safe_query(save_ai_msg)
 
         return ai_message
 
@@ -558,14 +592,18 @@ class ConversationService:
             self.set_work_dir(Path.cwd())
 
         # 保存用户消息
-        self._message_repo.create(
-            conversation_id=conversation_id,
-            role=MessageRole.USER.value,
-            content=content,
-        )
+        def save_user_msg(session):
+            repo = MessageRepository(session)
+            return repo.create(
+                conversation_id=conversation_id,
+                role=MessageRole.USER.value,
+                content=content,
+            )
+        
+        db_manager.safe_query(save_user_msg)
 
         # 获取对话历史（不包括刚刚保存的用户消息）
-        history = self._message_repo.get_by_conversation(conversation_id)
+        history = self.get_messages(conversation_id)
         # 移除最后一个（刚保存的用户消息）
         history = history[:-1]
 
@@ -680,16 +718,20 @@ class ConversationService:
         total_tokens = usage.get("total_tokens") if usage else None
         context_length = len(messages)
 
-        self._message_repo.create(
-            conversation_id=conversation_id,
-            role=MessageRole.ASSISTANT.value,
-            content=full_response,
-            model=ai_client.model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=total_tokens,
-            context_length=context_length,
-        )
+        def save_ai_msg(session):
+            repo = MessageRepository(session)
+            return repo.create(
+                conversation_id=conversation_id,
+                role=MessageRole.ASSISTANT.value,
+                content=full_response,
+                model=ai_client.model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+                context_length=context_length,
+            )
+        
+        db_manager.safe_query(save_ai_msg)
 
         # 自动提交：AI 完成响应后，检查是否有更改需要提交
         try:
@@ -753,14 +795,18 @@ class ConversationService:
             self.set_work_dir(Path.cwd())
 
         # 保存用户消息
-        self._message_repo.create(
-            conversation_id=conversation_id,
-            role=MessageRole.USER.value,
-            content=content,
-        )
+        def save_user_msg(session):
+            repo = MessageRepository(session)
+            return repo.create(
+                conversation_id=conversation_id,
+                role=MessageRole.USER.value,
+                content=content,
+            )
+        
+        db_manager.safe_query(save_user_msg)
 
         # 获取对话历史（不包括刚刚保存的用户消息）
-        history = self._message_repo.get_by_conversation(conversation_id)
+        history = self.get_messages(conversation_id)
         # 移除最后一个（刚保存的用户消息）
         history = history[:-1]
 
@@ -870,16 +916,20 @@ class ConversationService:
         total_tokens = usage.get("total_tokens") if usage else None
         context_length = len(messages)
 
-        self._message_repo.create(
-            conversation_id=conversation_id,
-            role=MessageRole.ASSISTANT.value,
-            content=response.content,
-            model=response.model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=total_tokens,
-            context_length=context_length,
-        )
+        def save_ai_msg(session):
+            repo = MessageRepository(session)
+            return repo.create(
+                conversation_id=conversation_id,
+                role=MessageRole.ASSISTANT.value,
+                content=response.content,
+                model=response.model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+                context_length=context_length,
+            )
+        
+        db_manager.safe_query(save_ai_msg)
 
         yield response.content
 
@@ -899,14 +949,18 @@ class ConversationService:
             str: AI 响应片段
         """
         # 保存用户消息
-        self._message_repo.create(
-            conversation_id=conversation_id,
-            role=MessageRole.USER.value,
-            content=content,
-        )
+        def save_user_msg(session):
+            repo = MessageRepository(session)
+            return repo.create(
+                conversation_id=conversation_id,
+                role=MessageRole.USER.value,
+                content=content,
+            )
+        
+        db_manager.safe_query(save_user_msg)
 
         # 获取对话历史（不包括刚刚保存的用户消息）
-        history = self._message_repo.get_by_conversation(conversation_id)
+        history = self.get_messages(conversation_id)
         # 移除最后一个（刚保存的用户消息）
         history = history[:-1]
 
@@ -961,16 +1015,20 @@ class ConversationService:
         total_tokens = usage.get("total_tokens") if usage else None
         context_length = len(messages)
 
-        self._message_repo.create(
-            conversation_id=conversation_id,
-            role=MessageRole.ASSISTANT.value,
-            content=full_response,
-            model=ai_client.model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=total_tokens,
-            context_length=context_length,
-        )
+        def save_ai_msg(session):
+            repo = MessageRepository(session)
+            return repo.create(
+                conversation_id=conversation_id,
+                role=MessageRole.ASSISTANT.value,
+                content=full_response,
+                model=ai_client.model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+                context_length=context_length,
+            )
+        
+        db_manager.safe_query(save_ai_msg)
 
     def apply_code_change(
         self,
@@ -1007,27 +1065,29 @@ class ConversationService:
         )
 
         # 创建代码修改记录
-        code_change_repo = CodeChangeRepository(get_db_session())
+        def create_change(session):
+            code_change_repo = CodeChangeRepository(session)
+            config = config_service.get_config()
+            branch_name = None
 
-        config = config_service.get_config()
-        branch_name = None
+            # 如果配置了自动创建临时分支
+            if config.create_temp_branch:
+                vcs = get_vcs(project_path)
+                if vcs:
+                    branch_name = vcs.create_temp_branch()
 
-        # 如果配置了自动创建临时分支
-        if config.create_temp_branch:
-            vcs = get_vcs(project_path)
-            if vcs:
-                branch_name = vcs.create_temp_branch()
-
-        change = code_change_repo.create(
-            message_id=message_id,
-            file_path=file_path,
-            project_path=project_path,
-            original_code=original_code,
-            modified_code=modified_code,
-            diff=diff,
-            branch_name=branch_name,
-        )
-
+            change = code_change_repo.create(
+                message_id=message_id,
+                file_path=file_path,
+                project_path=project_path,
+                original_code=original_code,
+                modified_code=modified_code,
+                diff=diff,
+                branch_name=branch_name,
+            )
+            return change
+        
+        change = db_manager.safe_query(create_change)
         return change.id
 
     def validate_api_key(self) -> bool:

@@ -322,7 +322,9 @@ class ChatWidget(QWidget):
                 duration=2000,
                 parent=self
             )
-            self._update_token_stats()
+            # 延迟更新 token 统计，避免数据库锁定
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(100, self._update_token_stats)
         except Exception as e:
             InfoBar.error(
                 title="创建失败",
@@ -399,7 +401,8 @@ class ChatWidget(QWidget):
                     if result.get("status") == "done":
                         self._set_processing(False)
                         self.chat_input.setFocus()
-                        self._update_token_stats()
+                        # 延迟更新 token 统计，避免数据库锁定
+                        QTimer.singleShot(100, self._update_token_stats)
                         return
                     elif result.get("status") == "chunk":
                         # 实时显示流式内容
@@ -425,12 +428,18 @@ class ChatWidget(QWidget):
 
     def _update_token_stats(self):
         """更新 token 统计"""
+        msg_session = None
+        conv_session = None
         try:
             from src.database.repositories import MessageRepository, ConversationRepository
             from src.database import get_db_session
 
-            msg_repo = MessageRepository(get_db_session())
-            conv_repo = ConversationRepository(get_db_session())
+            # 创建会话并确保在使用后正确关闭
+            msg_session = get_db_session()
+            conv_session = get_db_session()
+
+            msg_repo = MessageRepository(msg_session)
+            conv_repo = ConversationRepository(conv_session)
 
             # 当前对话的token统计
             if self.chat_conversation_id:
@@ -472,6 +481,18 @@ class ChatWidget(QWidget):
 
         except Exception as e:
             print(f"Token stats error: {e}")
+        finally:
+            # 确保关闭会话，释放数据库锁
+            if msg_session:
+                try:
+                    msg_session.close()
+                except:
+                    pass
+            if conv_session:
+                try:
+                    conv_session.close()
+                except:
+                    pass
 
     def eventFilter(self, obj, event):
         """事件过滤器 - 处理输入框的回车键"""

@@ -1,6 +1,6 @@
 """
 对话服务
-处理与 AI 的对话交互，支持工具调用
+处理与 AI 的对话交互,支持工具调用
 """
 import asyncio
 from typing import List, Optional, AsyncIterator, Callable
@@ -19,9 +19,9 @@ from ..tools import tool_registry
 class ConversationService:
     """
     对话服务
-    管理 AI 对话、消息存储和代码修改记录
+    管理 AI 对话,消息存储和代码修改记录
     
-    重要：不再持有长期的数据库会话，每次操作都创建新会话
+    重要:不再持有长期的数据库会话,每次操作都创建新会话
     """
 
     def __init__(self):
@@ -33,11 +33,11 @@ class ConversationService:
         self._current_work_dir = work_dir
 
     def _get_conversation_repo(self) -> ConversationRepository:
-        """获取对话仓库（每次创建新会话）"""
+        """获取对话仓库(每次创建新会话)"""
         return ConversationRepository(get_db_session())
 
     def _get_message_repo(self) -> MessageRepository:
-        """获取消息仓库（每次创建新会话）"""
+        """获取消息仓库(每次创建新会话)"""
         return MessageRepository(get_db_session())
 
     async def _generate_commit_message(self, user_question: str, ai_response: str) -> str:
@@ -79,7 +79,7 @@ class ConversationService:
                 # 没有变更
                 return None
 
-            # 限制 diff 大小，避免 token 过多
+            # 限制 diff 大小,避免 token 过多
             if len(diff_content) > 15000:
                 # 保留头部和尾部
                 half = 7000
@@ -109,7 +109,7 @@ class ConversationService:
             if len(changed_files) > 10:
                 file_info += f" 等 {len(changed_files)} 个文件"
 
-            prompt = f"""分析以下代码变更，生成一个简洁的 Git 提交消息。
+            prompt = f"""分析以下代码变更,生成一个简洁的 Git 提交消息.
 
 用户需求: {user_question[:200]}
 {file_info}
@@ -119,20 +119,20 @@ class ConversationService:
 {diff_content}
 ```
 
-请生成一个专业的 Git 提交消息，遵循以下规范：
+请生成一个专业的 Git 提交消息,遵循以下规范:
 1. 使用 conventional commits 格式: <type>: <description>
 2. type 可以是: feat(新功能), fix(修复), refactor(重构), perf(性能优化), style(代码格式), docs(文档), test(测试), chore(构建/工具)
-3. description 应该简洁明了，说明改动的目的和内容
-4. 只返回一条提交消息，格式如: "fix: 修复用户登录时的验证错误"
-5. 不要加引号，不要有其他内容
+3. description 应该简洁明了,说明改动的目的和内容
+4. 只返回一条提交消息,格式如: "fix: 修复用户登录时的验证错误"
+5. 不要加引号,不要有其他内容
 
-提交消息:"
+提交消息:"""
 
             # 调用 AI 生成提交消息
             from ..ai.base import Message, MessageRole, AIRequestConfig
 
             messages = [
-                Message(role=MessageRole.SYSTEM, content="你是一个专业的 Git 提交消息生成助手。请分析代码变更并生成符合规范的提交消息。"),
+                Message(role=MessageRole.SYSTEM, content="你是一个专业的 Git 提交消息生成助手.请分析代码变更并生成符合规范的提交消息."),
                 Message(role=MessageRole.USER, content=prompt)
             ]
 
@@ -174,7 +174,7 @@ class ConversationService:
             self._ai_client = get_ai_client()
 
             if not self._ai_client:
-                raise ValueError("未配置有效的 AI 提供商，请先配置提供商和 API 密钥")
+                raise ValueError("未配置有效的 AI 提供商,请先配置提供商和 API 密钥")
 
         return self._ai_client
 
@@ -213,7 +213,7 @@ class ConversationService:
                         missing_params.append(param.name)
 
                 if missing_params:
-                    error_msg = (f"缺少必需参数: {', '.join(missing_params)}。工具 '{tool_name}' 需要以下参数: " +
+                    error_msg = (f"缺少必需参数: {', '.join(missing_params)}.工具 '{tool_name}' 需要以下参数: " +
                                 ", ".join([f"{p.name}({p.type})" for p in tool.parameters if p.required]))
                     print(f"[TOOL ERROR] {error_msg}")
                     return {
@@ -226,7 +226,7 @@ class ConversationService:
             result = tool_registry.execute(tool_name, **arguments)
             result_dict = result.to_dict()
 
-            # 不再每次 Write 都自动提交，改为批量提交
+            # 不再每次 Write 都自动提交,改为批量提交
             # 移除了原有的自动提交逻辑
 
             return result_dict
@@ -243,7 +243,7 @@ class ConversationService:
             force: 是否强制提交(忽略 auto_commit 配置)
 
         Returns:
-            dict: 提交结果，包含 success, commit_id, commit_msg 等信息
+            dict: 提交结果, 包含 success, commit_id, commit_msg 等信息
         """
         import subprocess
         from .config_service import config_service
@@ -251,7 +251,7 @@ class ConversationService:
         target_dir = str(self._current_work_dir) if self._current_work_dir else str(Path.cwd())
 
         try:
-            # 检查是否启用自动提交（除非强制提交）
+            # 检查是否启用自动提交(除非强制提交)
             if not force:
                 config = config_service.get_config()
                 if not config.auto_commit:
@@ -371,7 +371,7 @@ class ConversationService:
                 )
 
                 if remote_result.returncode == 0 and remote_result.stdout.strip():
-                    # 有远程仓库，执行推送
+                    # 有远程仓库,执行推送
                     push_result = subprocess.run(
                         ['git', 'push'],
                         capture_output=True,
@@ -416,7 +416,7 @@ class ConversationService:
 
         Args:
             title: 对话标题
-            project_path: 项目路径（可选）
+            project_path: 项目路径(可选)
 
         Returns:
             int: 对话 ID
@@ -484,9 +484,9 @@ class ConversationService:
         
         user_message = db_manager.safe_query(save_user_msg)
 
-        # 获取对话历史（不包括刚刚保存的用户消息，手动添加）
+        # 获取对话历史(不包括刚刚保存的用户消息,手动添加)
         history = self.get_messages(conversation_id)
-        # 移除最后一个（刚保存的用户消息），因为我们会手动添加
+        # 移除最后一个(刚保存的用户消息),因为我们会手动添加
         history = history[:-1]
 
         # 构建消息列表
@@ -574,12 +574,12 @@ class ConversationService:
         work_dir: Optional[Path] = None,
     ) -> AsyncIterator[str]:
         """
-        发送消息并流式获取 AI 响应（支持工具调用）
+        发送消息并流式获取 AI 响应(支持工具调用)
 
         Args:
             conversation_id: 对话 ID
             content: 用户消息内容
-            work_dir: 工作目录（用于文件操作）
+            work_dir: 工作目录(用于文件操作)
 
         Yields:
             str: AI 响应片段
@@ -588,7 +588,7 @@ class ConversationService:
         if work_dir:
             self.set_work_dir(work_dir)
         elif not self._current_work_dir:
-            # 如果没有设置工作目录，使用当前目录
+            # 如果没有设置工作目录,使用当前目录
             self.set_work_dir(Path.cwd())
 
         # 保存用户消息
@@ -602,9 +602,9 @@ class ConversationService:
         
         db_manager.safe_query(save_user_msg)
 
-        # 获取对话历史（不包括刚刚保存的用户消息）
+        # 获取对话历史(不包括刚刚保存的用户消息)
         history = self.get_messages(conversation_id)
-        # 移除最后一个（刚保存的用户消息）
+        # 移除最后一个(刚保存的用户消息)
         history = history[:-1]
 
         # 构建消息列表
@@ -635,7 +635,7 @@ class ConversationService:
                 temperature=provider_config.temperature,
                 max_tokens=provider_config.max_tokens,
                 top_p=provider_config.top_p,
-                stream=False,  # 注意：这里会使用内部流式
+                stream=False,  # 注意:这里会使用内部流式
                 tools=tools,
             )
         else:
@@ -648,55 +648,55 @@ class ConversationService:
                 tools=tools,
             )
 
-        # 添加系统消息，告诉 AI 它可以使用的工具
+        # 添加系统消息,告诉 AI 它可以使用的工具
         system_message = Message(
             role=MessageRole.SYSTEM,
-            content="""你是一个 AI 编程助手（类似 Claude Code），可以帮助用户编写、查看和修改代码。
+            content="""你是一个 AI 编程助手(类似 Claude Code),可以帮助用户编写,查看和修改代码.
 
-**重要：你的行为模式**
-1. 用户直接告诉你"默认使用深色模式"等需求时，这通常是要修改代码实现功能
-2. 不要反复询问用户意图，直接使用工具探索和修改代码
-3. 先用 Read 工具查看相关文件，然后提出修改方案，最后用 Write 工具修改
+**重要:你的行为模式**
+1. 用户直接告诉你"默认使用深色模式"等需求时,这通常是要修改代码实现功能
+2. 不要反复询问用户意图,直接使用工具探索和修改代码
+3. 先用 Read 工具查看相关文件,然后提出修改方案,最后用 Write 工具修改
 
-**可用工具（必须提供正确的参数）：**
+**可用工具(必须提供正确的参数):**
 - Read(file_path: string, limit: int可选, offset: int可选): 读取文件内容
-  - file_path: 文件的完整路径（必需）
-  - limit: 读取的行数限制（可选）
-  - offset: 起始行号（可选，默认1）
+  - file_path: 文件的完整路径(必需)
+  - limit: 读取的行数限制(可选)
+  - offset: 起始行号(可选,默认1)
 
-- Write(file_path: string, content: string): 写入文件内容（会覆盖整个文件）
-  - file_path: 文件的完整路径（必需）
-  - content: 要写入的完整内容（必需）
+- Write(file_path: string, content: string): 写入文件内容(会覆盖整个文件)
+  - file_path: 文件的完整路径(必需)
+  - content: 要写入的完整内容(必需)
 
 - Bash(command: string, timeout: int可选): 执行系统命令
-  - command: 要执行的shell命令（必需）
-  - timeout: 超时时间（可选，默认120秒）
+  - command: 要执行的shell命令(必需)
+  - timeout: 超时时间(可选,默认120秒)
 
 - Glob(pattern: string): 搜索文件
-  - pattern: glob模式，如 **/*.py（必需）
+  - pattern: glob模式,如 **/*.py(必需)
 
-**重要：调用工具时必须提供所有必需参数！**
+**重要:调用工具时必须提供所有必需参数!**
 
-**工作流程：**
+**工作流程:**
 用户: "默认使用深色模式"
-→ 你: "我来帮你修改代码，让程序默认使用深色模式"
-→ 用 Glob(pattern="**/*gui*.py") 搜索相关文件
-→ 用 Read(file_path="找到的文件路径") 查看文件内容
-→ 解释修改方案
-→ 用 Write(file_path="文件路径", content="完整的新内容") 写入修改后的代码
+-> 你: "我来帮你修改代码,让程序默认使用深色模式"
+-> 用 Glob(pattern="**/*gui*.py") 搜索相关文件
+-> 用 Read(file_path="找到的文件路径") 查看文件内容
+-> 解释修改方案
+-> 用 Write(file_path="文件路径", content="完整的新内容") 写入修改后的代码
 
 工作目录: {work_dir}
 
-**注意事项：**
+**注意事项:**
 - 使用 Read 前先用 Glob 找到文件
-- Write 会覆盖整个文件，修改前务必先用 Read 读取
+- Write 会覆盖整个文件,修改前务必先用 Read 读取
 - 代码修改后告知用户具体改动""".format(
                 work_dir=str(work_dir) if work_dir else "当前目录"
             ),
         )
         messages.insert(0, system_message)
 
-        # 调用 AI（带工具调用的流式响应）
+        # 调用 AI(带工具调用的流式响应)
         ai_client = self._get_ai_client()
         full_response = ""
 
@@ -733,7 +733,7 @@ class ConversationService:
         
         db_manager.safe_query(save_ai_msg)
 
-        # 自动提交：AI 完成响应后，检查是否有更改需要提交
+        # 自动提交:AI 完成响应后,检查是否有更改需要提交
         try:
             from .config_service import config_service
             config = config_service.get_config()
@@ -750,7 +750,7 @@ class ConversationService:
                 commit_result = self.commit_changes(commit_message=commit_msg, force=True)
 
                 if commit_result.get("success"):
-                    # 提交成功，增加版本号
+                    # 提交成功,增加版本号
                     new_version = config_service.increment_version()
                     # 输出提示信息
                     yield f"\n\n✅ 已自动提交: {commit_msg}"
@@ -760,7 +760,7 @@ class ConversationService:
                     if commit_result.get("pushed"):
                         yield f" 并已推送到远程仓库"
                 elif "没有需要提交的更改" not in commit_result.get("error", ""):
-                    # 如果不是因为没更改而失败，显示错误
+                    # 如果不是因为没更改而失败,显示错误
                     yield f"\n\n⚠️ 自动提交失败: {commit_result.get('error', '')}"
         except Exception as e:
             # 自动提交失败不影响对话
@@ -776,12 +776,12 @@ class ConversationService:
         stream: bool = False,
     ) -> AsyncIterator[str]:
         """
-        发送消息并获取 AI 响应（支持工具调用）
+        发送消息并获取 AI 响应(支持工具调用)
 
         Args:
             conversation_id: 对话 ID
             content: 用户消息内容
-            work_dir: 工作目录（用于文件操作）
+            work_dir: 工作目录(用于文件操作)
             stream: 是否使用流式响应
 
         Yields:
@@ -791,7 +791,7 @@ class ConversationService:
         if work_dir:
             self.set_work_dir(work_dir)
         elif not self._current_work_dir:
-            # 如果没有设置工作目录，使用当前目录
+            # 如果没有设置工作目录,使用当前目录
             self.set_work_dir(Path.cwd())
 
         # 保存用户消息
@@ -805,9 +805,9 @@ class ConversationService:
         
         db_manager.safe_query(save_user_msg)
 
-        # 获取对话历史（不包括刚刚保存的用户消息）
+        # 获取对话历史(不包括刚刚保存的用户消息)
         history = self.get_messages(conversation_id)
-        # 移除最后一个（刚保存的用户消息）
+        # 移除最后一个(刚保存的用户消息)
         history = history[:-1]
 
         # 构建消息列表
@@ -851,55 +851,55 @@ class ConversationService:
                 tools=tools,
             )
 
-        # 添加系统消息，告诉 AI 它可以使用的工具
+        # 添加系统消息,告诉 AI 它可以使用的工具
         system_message = Message(
             role=MessageRole.SYSTEM,
-            content="""你是一个 AI 编程助手（类似 Claude Code），可以帮助用户编写、查看和修改代码。
+            content="""你是一个 AI 编程助手(类似 Claude Code),可以帮助用户编写,查看和修改代码.
 
-**重要：你的行为模式**
-1. 用户直接告诉你"默认使用深色模式"等需求时，这通常是要修改代码实现功能
-2. 不要反复询问用户意图，直接使用工具探索和修改代码
-3. 先用 Read 工具查看相关文件，然后提出修改方案，最后用 Write 工具修改
+**重要:你的行为模式**
+1. 用户直接告诉你"默认使用深色模式"等需求时,这通常是要修改代码实现功能
+2. 不要反复询问用户意图,直接使用工具探索和修改代码
+3. 先用 Read 工具查看相关文件,然后提出修改方案,最后用 Write 工具修改
 
-**可用工具（必须提供正确的参数）：**
+**可用工具(必须提供正确的参数):**
 - Read(file_path: string, limit: int可选, offset: int可选): 读取文件内容
-  - file_path: 文件的完整路径（必需）
-  - limit: 读取的行数限制（可选）
-  - offset: 起始行号（可选，默认1）
+  - file_path: 文件的完整路径(必需)
+  - limit: 读取的行数限制(可选)
+  - offset: 起始行号(可选,默认1)
 
-- Write(file_path: string, content: string): 写入文件内容（会覆盖整个文件）
-  - file_path: 文件的完整路径（必需）
-  - content: 要写入的完整内容（必需）
+- Write(file_path: string, content: string): 写入文件内容(会覆盖整个文件)
+  - file_path: 文件的完整路径(必需)
+  - content: 要写入的完整内容(必需)
 
 - Bash(command: string, timeout: int可选): 执行系统命令
-  - command: 要执行的shell命令（必需）
-  - timeout: 超时时间（可选，默认120秒）
+  - command: 要执行的shell命令(必需)
+  - timeout: 超时时间(可选,默认120秒)
 
 - Glob(pattern: string): 搜索文件
-  - pattern: glob模式，如 **/*.py（必需）
+  - pattern: glob模式,如 **/*.py(必需)
 
-**重要：调用工具时必须提供所有必需参数！**
+**重要:调用工具时必须提供所有必需参数!**
 
-**工作流程：**
+**工作流程:**
 用户: "默认使用深色模式"
-→ 你: "我来帮你修改代码，让程序默认使用深色模式"
-→ 用 Glob(pattern="**/*gui*.py") 搜索相关文件
-→ 用 Read(file_path="找到的文件路径") 查看文件内容
-→ 解释修改方案
-→ 用 Write(file_path="文件路径", content="完整的新内容") 写入修改后的代码
+-> 你: "我来帮你修改代码,让程序默认使用深色模式"
+-> 用 Glob(pattern="**/*gui*.py") 搜索相关文件
+-> 用 Read(file_path="找到的文件路径") 查看文件内容
+-> 解释修改方案
+-> 用 Write(file_path="文件路径", content="完整的新内容") 写入修改后的代码
 
 工作目录: {work_dir}
 
-**注意事项：**
+**注意事项:**
 - 使用 Read 前先用 Glob 找到文件
-- Write 会覆盖整个文件，修改前务必先用 Read 读取
+- Write 会覆盖整个文件,修改前务必先用 Read 读取
 - 代码修改后告知用户具体改动""".format(
                 work_dir=str(work_dir) if work_dir else "当前目录"
             ),
         )
         messages.insert(0, system_message)
 
-        # 调用 AI（带工具调用）
+        # 调用 AI(带工具调用)
         ai_client = self._get_ai_client()
         response = await ai_client.chat_with_tools(
             messages=messages,
@@ -909,7 +909,7 @@ class ConversationService:
             max_iterations=10,
         )
 
-        # 保存 AI 响应，获取 token 统计
+        # 保存 AI 响应,获取 token 统计
         usage = response.usage if response.usage else ai_client.get_last_usage()
         input_tokens = usage.get("input_tokens") if usage else None
         output_tokens = usage.get("output_tokens") if usage else None
@@ -939,7 +939,7 @@ class ConversationService:
         content: str,
     ) -> AsyncIterator[str]:
         """
-        发送消息并流式获取 AI 响应（不含工具调用）
+        发送消息并流式获取 AI 响应(不含工具调用)
 
         Args:
             conversation_id: 对话 ID
@@ -959,9 +959,9 @@ class ConversationService:
         
         db_manager.safe_query(save_user_msg)
 
-        # 获取对话历史（不包括刚刚保存的用户消息）
+        # 获取对话历史(不包括刚刚保存的用户消息)
         history = self.get_messages(conversation_id)
-        # 移除最后一个（刚保存的用户消息）
+        # 移除最后一个(刚保存的用户消息)
         history = history[:-1]
 
         # 构建消息列表
@@ -1008,7 +1008,7 @@ class ConversationService:
             full_response += chunk
             yield chunk
 
-        # 保存 AI 响应，获取 token 统计
+        # 保存 AI 响应,获取 token 统计
         usage = ai_client.get_last_usage()
         input_tokens = usage.get("input_tokens") if usage else None
         output_tokens = usage.get("output_tokens") if usage else None

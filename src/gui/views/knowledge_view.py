@@ -17,7 +17,7 @@ from qfluentwidgets import (
 )
 
 from ...database.repositories import KnowledgeRepository
-from ...database.models import KnowledgeEntry, KnowledgeType
+from ...models import KnowledgeEntry
 
 
 class CollapsibleSection(CardWidget):
@@ -52,82 +52,42 @@ class CollapsibleSection(CardWidget):
         header_layout.addWidget(type_badge)
         
         # 标题
-        self.title_label = StrongBodyLabel(self.entry.title or "无标题")
-        self.title_label.setStyleSheet("font-size: 14px;")
-        header_layout.addWidget(self.title_label)
+        title_label = StrongBodyLabel(self.entry.title)
+        header_layout.addWidget(title_label)
         
         header_layout.addStretch()
         
-        # 摘要（折叠时显示）
-        self.summary_label = BodyLabel(self._get_summary())
-        self.summary_label.setWordWrap(True)
-        self.summary_label.setStyleSheet("color: #666; font-size: 12px;")
-        header_layout.addWidget(self.summary_label)
-        
         layout.addWidget(header)
         
-        # 内容容器（初始隐藏）
+        # 内容容器
         self.content_widget = QWidget()
         self.content_layout = QVBoxLayout(self.content_widget)
         self.content_layout.setContentsMargins(0, 0, 0, 0)
         
-        # 详细内容
-        if self.entry.content:
-            content_label = BodyLabel(self.entry.content)
-            content_label.setWordWrap(True)
-            self.content_layout.addWidget(content_label)
+        # 内容文本
+        content_text = TextEdit()
+        content_text.setPlainText(self.entry.content)
+        content_text.setReadOnly(True)
+        content_text.setFixedHeight(150)
+        self.content_layout.addWidget(content_text)
         
-        # 代码片段
-        if self.entry.code_snippet:
-            code_card = SimpleCardWidget()
-            code_layout = QVBoxLayout(code_card)
-            code_layout.setContentsMargins(12, 12, 12, 12)
-            
-            code_title = StrongBodyLabel("代码片段:")
-            code_layout.addWidget(code_title)
-            
-            code_text = TextEdit()
-            code_text.setPlainText(self.entry.code_snippet)
-            code_text.setReadOnly(True)
-            code_text.setMaximumHeight(150)
-            code_layout.addWidget(code_text)
-            
-            self.content_layout.addWidget(code_card)
+        # 标签
+        if self.entry.tags:
+            tags_label = BodyLabel(f"标签: {self.entry.tags}")
+            self.content_layout.addWidget(tags_label)
         
-        # 文件路径
-        if self.entry.file_path:
-            file_label = BodyLabel(f"📁 {self.entry.file_path}")
-            file_label.setStyleSheet("color: #0078d4;")
-            self.content_layout.addWidget(file_label)
+        # 来源信息
+        if self.entry.source_type:
+            source_label = BodyLabel(f"来源: {self.entry.source_type} #{self.entry.source_id}")
+            self.content_layout.addWidget(source_label)
         
         self.content_widget.hide()
         layout.addWidget(self.content_widget)
-    
-    def _get_type_label(self) -> str:
-        """获取类型标签"""
-        type_map = {
-            KnowledgeType.CLASS: "类",
-            KnowledgeType.FUNCTION: "函数",
-            KnowledgeType.MODULE: "模块",
-            KnowledgeType.VARIABLE: "变量",
-            KnowledgeType.CONCEPT: "概念"
-        }
-        return type_map.get(self.entry.type, "其他")
-    
-    def _get_summary(self) -> str:
-        """获取摘要"""
-        if self.entry.summary:
-            return self.entry.summary
-        elif self.entry.content:
-            # 截取前50个字符作为摘要
-            return self.entry.content[:50] + "..." if len(self.entry.content) > 50 else self.entry.content
-        return ""
     
     def _toggle(self):
         """切换折叠状态"""
         self._is_expanded = not self._is_expanded
         
-        # 更新按钮图标
         if self._is_expanded:
             self.toggle_btn.setIcon(FluentIcon.CARET_DOWN)
             self.content_widget.show()
@@ -135,20 +95,17 @@ class CollapsibleSection(CardWidget):
             self.toggle_btn.setIcon(FluentIcon.CARET_RIGHT)
             self.content_widget.hide()
     
-    def is_expanded(self) -> bool:
-        """是否展开"""
-        return self._is_expanded
-    
-    def set_expanded(self, expanded: bool):
-        """设置展开状态"""
-        if self._is_expanded != expanded:
-            self._toggle()
+    def _get_type_label(self) -> str:
+        """获取类型标签"""
+        if self.entry.source_type:
+            return self.entry.source_type.upper()
+        return "GENERAL"
 
 
 class KnowledgeView(QWidget):
     """
     知识库视图
-    显示代码知识库（带折叠功能）
+    显示和管理知识库条目
     """
     
     def __init__(self, parent=None):
@@ -157,7 +114,7 @@ class KnowledgeView(QWidget):
         
         self.entries: List[KnowledgeEntry] = []
         self._setup_ui()
-        self._load_knowledge()
+        self._load_entries()
     
     def _setup_ui(self):
         """设置界面"""
@@ -166,7 +123,7 @@ class KnowledgeView(QWidget):
         layout.setSpacing(16)
         
         # 标题
-        title = SubtitleLabel("代码知识库")
+        title = SubtitleLabel("知识库")
         layout.addWidget(title)
         
         # 工具栏
@@ -176,17 +133,48 @@ class KnowledgeView(QWidget):
         # 主内容区域（使用分割器）
         splitter = QSplitter(Qt.Horizontal)
         
-        # 左侧：树形结构
-        left_panel = self._create_tree_panel()
+        # 左侧：条目列表
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        
+        list_label = StrongBodyLabel("条目列表")
+        left_layout.addWidget(list_label)
+        
+        self.entries_scroll = ScrollArea()
+        self.entries_scroll.setWidgetResizable(True)
+        
+        self.entries_container = QWidget()
+        self.entries_layout = QVBoxLayout(self.entries_container)
+        self.entries_layout.setAlignment(Qt.AlignTop)
+        
+        self.entries_scroll.setWidget(self.entries_container)
+        left_layout.addWidget(self.entries_scroll)
+        
+        # 右侧：详细内容
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        
+        detail_label = StrongBodyLabel("详细信息")
+        right_layout.addWidget(detail_label)
+        
+        self.detail_card = SimpleCardWidget()
+        detail_layout = QVBoxLayout(self.detail_card)
+        
+        self.detail_title = SubtitleLabel("选择一个条目")
+        detail_layout.addWidget(self.detail_title)
+        
+        self.detail_content = TextEdit()
+        self.detail_content.setReadOnly(True)
+        detail_layout.addWidget(self.detail_content)
+        
+        right_layout.addWidget(self.detail_card)
+        
         splitter.addWidget(left_panel)
-        
-        # 右侧：详细列表
-        right_panel = self._create_list_panel()
         splitter.addWidget(right_panel)
-        
-        # 设置分割比例
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 2)
+        splitter.setStretchFactor(0, 2)
+        splitter.setStretchFactor(1, 3)
         
         layout.addWidget(splitter)
     
@@ -205,81 +193,36 @@ class KnowledgeView(QWidget):
         layout.addWidget(self.search_edit)
         
         # 类型筛选
-        layout.addWidget(BodyLabel("类型:"))
-        self.type_combo = ComboBox()
-        self.type_combo.addItems(["全部", "类", "函数", "模块", "变量", "概念"])
-        self.type_combo.setCurrentIndex(0)
-        self.type_combo.currentIndexChanged.connect(self._on_filter_changed)
-        layout.addWidget(self.type_combo)
+        layout.addWidget(BodyLabel("来源:"))
+        self.source_combo = ComboBox()
+        self.source_combo.addItems(["全部", "bug", "review", "conversation"])
+        self.source_combo.setCurrentIndex(0)
+        self.source_combo.currentIndexChanged.connect(self._on_filter_changed)
+        layout.addWidget(self.source_combo)
         
         layout.addStretch()
         
-        # 操作按钮
-        expand_all_btn = PushButton("全部展开")
-        expand_all_btn.clicked.connect(self._expand_all)
-        layout.addWidget(expand_all_btn)
-        
-        collapse_all_btn = PushButton("全部折叠")
-        collapse_all_btn.clicked.connect(self._collapse_all)
-        layout.addWidget(collapse_all_btn)
-        
+        # 刷新按钮
         refresh_btn = PushButton("刷新")
         refresh_btn.setIcon(FluentIcon.SYNC)
-        refresh_btn.clicked.connect(self._load_knowledge)
+        refresh_btn.clicked.connect(self._load_entries)
         layout.addWidget(refresh_btn)
         
         return toolbar
     
-    def _create_tree_panel(self) -> QWidget:
-        """创建树形结构面板"""
-        panel = CardWidget()
-        layout = QVBoxLayout(panel)
-        
-        title = StrongBodyLabel("知识树")
-        layout.addWidget(title)
-        
-        # 树形控件
-        self.tree_widget = TreeWidget()
-        self.tree_widget.setHeaderLabels(["名称", "类型"])
-        self.tree_widget.itemClicked.connect(self._on_tree_item_clicked)
-        layout.addWidget(self.tree_widget)
-        
-        return panel
-    
-    def _create_list_panel(self) -> QWidget:
-        """创建列表面板"""
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        
-        # 知识库条目列表
-        self.scroll_area = ScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        
-        self.entries_container = QWidget()
-        self.entries_layout = QVBoxLayout(self.entries_container)
-        self.entries_layout.setAlignment(Qt.AlignTop)
-        self.entries_layout.setSpacing(12)
-        
-        self.scroll_area.setWidget(self.entries_container)
-        layout.addWidget(self.scroll_area)
-        
-        return panel
-    
-    def _load_knowledge(self):
-        """加载知识库"""
+    def _load_entries(self):
+        """加载知识库条目"""
         try:
             from ...database import get_db_session
             with get_db_session() as session:
                 repo = KnowledgeRepository(session)
                 self.entries = repo.get_all_entries()
             
-            self._refresh_tree()
-            self._refresh_list()
+            self._refresh_entries_list()
             
             InfoBar.success(
                 title="加载成功",
-                content=f"已加载 {len(self.entries)} 个知识条目",
+                content=f"已加载 {len(self.entries)} 个条目",
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -298,32 +241,8 @@ class KnowledgeView(QWidget):
                 parent=self
             )
     
-    def _refresh_tree(self):
-        """刷新树形结构"""
-        self.tree_widget.clear()
-        
-        # 按文件路径分组
-        file_groups = {}
-        for entry in self.entries:
-            file_path = entry.file_path or "未分类"
-            if file_path not in file_groups:
-                file_groups[file_path] = []
-            file_groups[file_path].append(entry)
-        
-        # 构建树
-        for file_path, entries in file_groups.items():
-            file_item = QTreeWidgetItem([file_path, "文件"])
-            self.tree_widget.addTopLevelItem(file_item)
-            
-            for entry in entries:
-                entry_item = QTreeWidgetItem([entry.title or "无标题", entry.type.value])
-                file_item.addChild(entry_item)
-        
-        # 展开所有项
-        self.tree_widget.expandAll()
-    
-    def _refresh_list(self):
-        """刷新列表显示"""
+    def _refresh_entries_list(self):
+        """刷新条目列表"""
         # 清空现有列表
         while self.entries_layout.count():
             item = self.entries_layout.takeAt(0)
@@ -332,48 +251,33 @@ class KnowledgeView(QWidget):
         
         # 获取筛选条件
         search_text = self.search_edit.text().lower()
-        type_filter = self.type_combo.currentText()
+        source_filter = self.source_combo.currentText()
         
         # 筛选并添加条目
         for entry in self.entries:
             # 应用筛选条件
-            if type_filter != "全部" and entry.type.value != type_filter:
-                continue
+            if source_filter != "全部":
+                if entry.source_type != source_filter:
+                    continue
+            
             if search_text:
-                if entry.title and search_text not in entry.title.lower():
-                    if entry.content and search_text not in entry.content.lower():
-                        continue
+                match = False
+                if search_text in entry.title.lower():
+                    match = True
+                if search_text in entry.content.lower():
+                    match = True
+                if entry.tags and search_text in entry.tags.lower():
+                    match = True
+                if not match:
+                    continue
             
             section = CollapsibleSection(entry)
             self.entries_layout.addWidget(section)
     
-    def _on_tree_item_clicked(self, item, column):
-        """树形项目点击处理"""
-        # 可以在这里实现点击树形项目后高亮对应的列表项
-        pass
-    
     def _on_search(self, text: str):
         """搜索处理"""
-        self._refresh_list()
+        self._refresh_entries_list()
     
     def _on_filter_changed(self):
         """筛选条件改变"""
-        self._refresh_list()
-    
-    def _expand_all(self):
-        """展开所有条目"""
-        for i in range(self.entries_layout.count()):
-            item = self.entries_layout.itemAt(i)
-            if item and item.widget():
-                widget = item.widget()
-                if isinstance(widget, CollapsibleSection):
-                    widget.set_expanded(True)
-    
-    def _collapse_all(self):
-        """折叠所有条目"""
-        for i in range(self.entries_layout.count()):
-            item = self.entries_layout.itemAt(i)
-            if item and item.widget():
-                widget = item.widget()
-                if isinstance(widget, CollapsibleSection):
-                    widget.set_expanded(False)
+        self._refresh_entries_list()

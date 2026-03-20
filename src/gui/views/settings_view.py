@@ -78,6 +78,100 @@ class ValidationWorker(QObject):
                 self.finished.emit(False, f"Validation failed: {error_msg}")
 
 
+class SettingsSaveWorker(QObject):
+    """设置保存工作线程 - 在后台执行数据库操作，避免UI卡死"""
+
+    finished = Signal(bool, str)  # (success, message)
+
+    def __init__(self, settings: dict, provider: str):
+        super().__init__()
+        self.settings = settings
+        self.provider = provider
+
+    def _get_provider_type(self, provider: str) -> ProviderType:
+        """Convert provider string to ProviderType"""
+        provider_map = {
+            "claude": ProviderType.CLAUDE,
+            "anthropic": ProviderType.CLAUDE,
+            "openai": ProviderType.OPENAI,
+            "deepseek": ProviderType.DEEPSEEK,
+            "ollama": ProviderType.CUSTOM,
+            "openrouter": ProviderType.CUSTOM
+        }
+        return provider_map.get(provider.lower(), ProviderType.CUSTOM)
+
+    def run(self):
+        """执行保存操作（在后台线程中）"""
+        try:
+            api_config = self.settings.get("api", {})
+            provider = self.provider
+            api_key = api_config.get("api_key", "")
+            base_url = api_config.get("base_url", "")
+            model = api_config.get("model", "")
+            max_tokens = api_config.get("max_tokens", 4096)
+            temperature = api_config.get("temperature", 0.7)
+
+            # Don't update Provider system if no API key
+            if not api_key:
+                print("Warning: No API key provided, skipping Provider system sync")
+                self.finished.emit(True, "Settings saved (no API key to sync)")
+                return
+
+            # Get or create default Provider
+            provider_type = self._get_provider_type(provider)
+
+            # Try to get existing default provider
+            existing_providers = provider_manager.get_providers()
+            default_provider = None
+
+            # Find existing default provider (id is "default" or first one)
+            for p in existing_providers:
+                if p.id == "default":
+                    default_provider = p
+                    break
+
+            # Build ProviderConfig
+            provider_config = ProviderConfig(
+                id=default_provider.id if default_provider else "default",
+                name=f"{provider.upper()} (Default)",
+                provider_type=provider_type,
+                api_key=api_key,
+                api_endpoint=base_url if base_url else "",
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                is_active=True,
+                is_enabled=True
+            )
+
+            # Update or create Provider
+            if default_provider:
+                success = provider_manager.update_provider(provider_config.id, provider_config)
+                if success:
+                    print(f"Success: Updated default Provider: {provider_config.id}")
+                    # Switch to this provider
+                    provider_manager.switch_provider(provider_config.id)
+                else:
+                    print(f"Warning: Failed to update Provider")
+            else:
+                success = provider_manager.add_provider(provider_config)
+                if success:
+                    print(f"Success: Created default Provider: {provider_config.id}")
+                    # Switch to this provider
+                    provider_manager.switch_provider(provider_config.id)
+                else:
+                    print(f"Warning: Failed to create Provider")
+
+            self.finished.emit(True, "Settings saved successfully")
+
+        except Exception as e:
+            error_msg = f"Failed to sync to Provider system: {str(e)}"
+            print(f"Error: {error_msg}")
+            import traceback
+            traceback.print_exc()
+            self.finished.emit(False, error_msg)
+
+
 class SettingsView(QWidget):
     """Settings View"""
 
@@ -91,6 +185,9 @@ class SettingsView(QWidget):
 
         self._validation_thread = None
         self._validation_worker = None
+        
+        self._save_thread = None
+        self._save_worker = None
 
         self._init_ui()
         self._load_settings()
@@ -626,75 +723,44 @@ class SettingsView(QWidget):
                 position=InfoBarPosition.TOP
             )
 
-    def _sync_to_provider_system(self, settings: dict):
-        """Sync settings to Provider system"""
-        try:
-            api_config = settings.get("api", {})
-            provider = api_config.get("provider", "openai")
-            api_key = api_config.get("api_key", "")
-            base_url = api_config.get("base_url", "")
-            model = api_config.get("model", "")
-            max_tokens = api_config.get("max_tokens", 4096)
-            temperature = api_config.get("temperature", 0.7)
+    def _on_save_finished(self, success: bool, message: str):
+        """保存完成回调（在主线程中执行）"""
+        # 清理线程
+        if self._save_thread:
+            self._save_thread.quit()
+            self._save_thread.wait()
+            self._save_thread = None
+            self._save_worker = None
 
-            # Don't update Provider system if no API key
-            if not api_key:
-                print("Warning: No API key provided, skipping Provider system sync")
-                return
+        # 恢复按钮状态
+        self.save_btn.setEnabled(True)
 
-            # Get or create default Provider
-            provider_type = self._get_provider_type(provider)
+        if success:
+            # Emit settings changed event
+            self.settings_changed.emit()
 
-            # Try to get existing default provider
-            existing_providers = provider_manager.get_providers()
-            default_provider = None
-
-            # Find existing default provider (id is "default" or first one)
-            for p in existing_providers:
-                if p.id == "default":
-                    default_provider = p
-                    break
-
-            # Build ProviderConfig
-            provider_config = ProviderConfig(
-                id=default_provider.id if default_provider else "default",
-                name=f"{provider.upper()} (Default)",
-                provider_type=provider_type,
-                api_key=api_key,
-                api_endpoint=base_url if base_url else "",
-                model=model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                is_active=True,
-                is_enabled=True
+            # Show success message
+            InfoBar.success(
+                title="Save Successful",
+                content=message,
+                parent=self,
+                position=InfoBarPosition.TOP
+            )
+        else:
+            # Show error message
+            InfoBar.error(
+                title="Save Failed",
+                content=message,
+                parent=self,
+                position=InfoBarPosition.TOP
             )
 
-            # Update or create Provider
-            if default_provider:
-                success = provider_manager.update_provider(provider_config.id, provider_config)
-                if success:
-                    print(f"Success: Updated default Provider: {provider_config.id}")
-                    # Switch to this provider
-                    provider_manager.switch_provider(provider_config.id)
-                else:
-                    print(f"Warning: Failed to update Provider")
-            else:
-                success = provider_manager.add_provider(provider_config)
-                if success:
-                    print(f"Success: Created default Provider: {provider_config.id}")
-                    # Switch to this provider
-                    provider_manager.switch_provider(provider_config.id)
-                else:
-                    print(f"Warning: Failed to create Provider")
-
-        except Exception as e:
-            print(f"Warning: Failed to sync to Provider system: {str(e)}")
-            import traceback
-            traceback.print_exc()
-
     def _save_settings(self):
-        """Save settings"""
+        """Save settings - 使用后台线程避免UI卡死"""
         try:
+            # 禁用保存按钮，防止重复点击
+            self.save_btn.setEnabled(False)
+
             # Build settings dictionary
             settings = {
                 "api": {
@@ -725,24 +791,28 @@ class SettingsView(QWidget):
                 }
             }
 
-            # Save to config file
+            # Save to config file (同步操作，通常很快)
             config_service.update_config(settings)
 
-            # Sync to Provider system
-            self._sync_to_provider_system(settings)
+            # Sync to Provider system in background thread (异步操作，避免卡死UI)
+            provider = self.provider_combo.currentText()
+            
+            # 创建工作线程
+            self._save_thread = QThread()
+            self._save_worker = SettingsSaveWorker(settings, provider)
+            self._save_worker.moveToThread(self._save_thread)
 
-            # Emit settings changed event
-            self.settings_changed.emit()
+            # 连接信号
+            self._save_thread.started.connect(self._save_worker.run)
+            self._save_worker.finished.connect(self._on_save_finished)
 
-            # Show success message
-            InfoBar.success(
-                title="Save Successful",
-                content="Settings saved, AI configuration synced.",
-                parent=self,
-                position=InfoBarPosition.TOP
-            )
+            # 启动线程
+            self._save_thread.start()
 
         except Exception as e:
+            # 恢复按钮状态
+            self.save_btn.setEnabled(True)
+            
             InfoBar.error(
                 title="Save Failed",
                 content=f"Error saving settings: {str(e)}",

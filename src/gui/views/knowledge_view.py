@@ -1,391 +1,379 @@
 """
 知识库视图
-知识库浏览和搜索界面
+代码知识库界面（带折叠功能）
 """
+from typing import Optional, List
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
-    QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QTabWidget
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QScrollArea, QLabel, QFrame, QSplitter
 )
 from qfluentwidgets import (
-    PushButton, SearchLineEdit, ComboBox, PrimaryPushButton,
-    BodyLabel, StrongBodyLabel, CardWidget, SubtitleLabel,
-    TableWidget, InfoBar, InfoBarPosition, ScrollArea,
-    SimpleCardWidget, PillPushButton
+    CardWidget, PushButton, BodyLabel, StrongBodyLabel,
+    InfoBar, InfoBarPosition, SearchLineEdit, ToolButton,
+    FluentIcon, ScrollArea, TransparentToolButton,
+    SubtitleLabel, PillPushButton, ComboBox, TreeWidget,
+    TextEdit, SimpleCardWidget
 )
-from PySide6.QtWidgets import QDialog, QLabel
 
-from ...services import knowledge_service, KnowledgeCreateInfo
+from ...database.repositories import KnowledgeRepository
+from ...database.models import KnowledgeEntry, KnowledgeType
+
+
+class CollapsibleSection(CardWidget):
+    """可折叠的知识库条目"""
+    
+    def __init__(self, entry: KnowledgeEntry, parent=None):
+        super().__init__(parent)
+        self.entry = entry
+        self._is_expanded = False
+        self._setup_ui()
+    
+    def _setup_ui(self):
+        """设置界面"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(12)
+        
+        # 标题栏
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 折叠按钮
+        self.toggle_btn = TransparentToolButton(FluentIcon.CARET_RIGHT)
+        self.toggle_btn.setFixedSize(32, 32)
+        self.toggle_btn.clicked.connect(self._toggle)
+        header_layout.addWidget(self.toggle_btn)
+        
+        # 类型标签
+        type_badge = PillPushButton(self._get_type_label())
+        type_badge.setEnabled(False)
+        header_layout.addWidget(type_badge)
+        
+        # 标题
+        self.title_label = StrongBodyLabel(self.entry.title or "无标题")
+        self.title_label.setStyleSheet("font-size: 14px;")
+        header_layout.addWidget(self.title_label)
+        
+        header_layout.addStretch()
+        
+        # 摘要（折叠时显示）
+        self.summary_label = BodyLabel(self._get_summary())
+        self.summary_label.setWordWrap(True)
+        self.summary_label.setStyleSheet("color: #666; font-size: 12px;")
+        header_layout.addWidget(self.summary_label)
+        
+        layout.addWidget(header)
+        
+        # 内容容器（初始隐藏）
+        self.content_widget = QWidget()
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 详细内容
+        if self.entry.content:
+            content_label = BodyLabel(self.entry.content)
+            content_label.setWordWrap(True)
+            self.content_layout.addWidget(content_label)
+        
+        # 代码片段
+        if self.entry.code_snippet:
+            code_card = SimpleCardWidget()
+            code_layout = QVBoxLayout(code_card)
+            code_layout.setContentsMargins(12, 12, 12, 12)
+            
+            code_title = StrongBodyLabel("代码片段:")
+            code_layout.addWidget(code_title)
+            
+            code_text = TextEdit()
+            code_text.setPlainText(self.entry.code_snippet)
+            code_text.setReadOnly(True)
+            code_text.setMaximumHeight(150)
+            code_layout.addWidget(code_text)
+            
+            self.content_layout.addWidget(code_card)
+        
+        # 文件路径
+        if self.entry.file_path:
+            file_label = BodyLabel(f"📁 {self.entry.file_path}")
+            file_label.setStyleSheet("color: #0078d4;")
+            self.content_layout.addWidget(file_label)
+        
+        self.content_widget.hide()
+        layout.addWidget(self.content_widget)
+    
+    def _get_type_label(self) -> str:
+        """获取类型标签"""
+        type_map = {
+            KnowledgeType.CLASS: "类",
+            KnowledgeType.FUNCTION: "函数",
+            KnowledgeType.MODULE: "模块",
+            KnowledgeType.VARIABLE: "变量",
+            KnowledgeType.CONCEPT: "概念"
+        }
+        return type_map.get(self.entry.type, "其他")
+    
+    def _get_summary(self) -> str:
+        """获取摘要"""
+        if self.entry.summary:
+            return self.entry.summary
+        elif self.entry.content:
+            # 截取前50个字符作为摘要
+            return self.entry.content[:50] + "..." if len(self.entry.content) > 50 else self.entry.content
+        return ""
+    
+    def _toggle(self):
+        """切换折叠状态"""
+        self._is_expanded = not self._is_expanded
+        
+        # 更新按钮图标
+        if self._is_expanded:
+            self.toggle_btn.setIcon(FluentIcon.CARET_DOWN)
+            self.content_widget.show()
+        else:
+            self.toggle_btn.setIcon(FluentIcon.CARET_RIGHT)
+            self.content_widget.hide()
+    
+    def is_expanded(self) -> bool:
+        """是否展开"""
+        return self._is_expanded
+    
+    def set_expanded(self, expanded: bool):
+        """设置展开状态"""
+        if self._is_expanded != expanded:
+            self._toggle()
 
 
 class KnowledgeView(QWidget):
-    """知识库视图"""
-
-    entryCreated = Signal(int)  # 条目创建信号
-
+    """
+    知识库视图
+    显示代码知识库（带折叠功能）
+    """
+    
     def __init__(self, parent=None):
         super().__init__(parent)
-        # 设置 objectName（FluentWindow 要求）
         self.setObjectName("knowledgeView")
-
+        
+        self.entries: List[KnowledgeEntry] = []
         self._setup_ui()
         self._load_knowledge()
-
+    
     def _setup_ui(self):
         """设置界面"""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(16)
-
-        # 标题和工具栏
-        header = self._create_header()
-        layout.addWidget(header)
-
-        # 标签页
-        self.tabs = QTabWidget()
-        self.tabs.addTab(self._create_browse_tab(), "浏览")
-        self.tabs.addTab(self._create_search_tab(), "搜索")
-        self.tabs.addTab(self._create_stats_tab(), "统计")
-        layout.addWidget(self.tabs)
-
-    def _create_header(self) -> QWidget:
-        """创建头部"""
-        header = QWidget()
-        layout = QHBoxLayout(header)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        title = StrongBodyLabel("知识库")
+        
+        # 标题
+        title = SubtitleLabel("代码知识库")
         layout.addWidget(title)
-
-        layout.addStretch()
-
-        # 新建条目按钮
-        create_btn = PrimaryPushButton("新建条目")
-        create_btn.clicked.connect(self._create_entry)
-        layout.addWidget(create_btn)
-
-        # 刷新按钮
-        refresh_btn = PushButton("刷新")
-        refresh_btn.clicked.connect(self._load_knowledge)
-        layout.addWidget(refresh_btn)
-
-        return header
-
-    def _create_browse_tab(self) -> QWidget:
-        """创建浏览标签页"""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        # 分类选择
-        toolbar = QWidget()
-        toolbar_layout = QHBoxLayout(toolbar)
-        toolbar_layout.setContentsMargins(0, 0, 0, 0)
-
-        toolbar_layout.addWidget(BodyLabel("分类:"))
-        self.category_combo = ComboBox()
-        self.category_combo.addItems(["全部"] + knowledge_service.get_categories())
-        self.category_combo.currentTextChanged.connect(self._on_category_changed)
-        toolbar_layout.addWidget(self.category_combo)
-
-        toolbar_layout.addStretch()
-
+        
+        # 工具栏
+        toolbar = self._create_toolbar()
         layout.addWidget(toolbar)
-
-        # 条目列表
-        self.browse_table = TableWidget()
-        self.browse_table.setColumnCount(4)
-        self.browse_table.setHorizontalHeaderLabels(["标题", "分类", "访问次数", "创建时间"])
-        self.browse_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.browse_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.browse_table.setAlternatingRowColors(True)
-        self.browse_table.cellDoubleClicked.connect(self._show_entry_detail)
-        layout.addWidget(self.browse_table)
-
-        return tab
-
-    def _create_search_tab(self) -> QWidget:
-        """创建搜索标签页"""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
+        
+        # 主内容区域（使用分割器）
+        splitter = QSplitter(Qt.Horizontal)
+        
+        # 左侧：树形结构
+        left_panel = self._create_tree_panel()
+        splitter.addWidget(left_panel)
+        
+        # 右侧：详细列表
+        right_panel = self._create_list_panel()
+        splitter.addWidget(right_panel)
+        
+        # 设置分割比例
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
+        
+        layout.addWidget(splitter)
+    
+    def _create_toolbar(self) -> QWidget:
+        """创建工具栏"""
+        toolbar = QWidget()
+        layout = QHBoxLayout(toolbar)
         layout.setContentsMargins(0, 0, 0, 0)
-
-        # 搜索栏
-        search_bar = QWidget()
-        search_layout = QHBoxLayout(search_bar)
-        search_layout.setContentsMargins(0, 0, 0, 0)
-
+        
+        # 搜索框
+        layout.addWidget(BodyLabel("搜索:"))
         self.search_edit = SearchLineEdit()
         self.search_edit.setPlaceholderText("搜索知识库...")
+        self.search_edit.setFixedWidth(300)
         self.search_edit.textChanged.connect(self._on_search)
-        search_layout.addWidget(self.search_edit)
-
-        search_btn = PushButton("搜索")
-        search_btn.clicked.connect(self._on_search_button)
-        search_layout.addWidget(search_btn)
-
-        layout.addWidget(search_bar)
-
-        # 搜索结果
-        self.search_table = TableWidget()
-        self.search_table.setColumnCount(4)
-        self.search_table.setHorizontalHeaderLabels(["标题", "分类", "匹配度", "操作"])
-        self.search_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.search_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.search_table.setAlternatingRowColors(True)
-        layout.addWidget(self.search_table)
-
-        return tab
-
-    def _create_stats_tab(self) -> QWidget:
-        """创建统计标签页"""
-        tab = ScrollArea()
-        tab.setWidgetResizable(True)
-
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(16)
-
-        # 统计卡片
-        self.stats_cards = []
-        for i in range(4):
-            card = SimpleCardWidget()
-            card_layout = QVBoxLayout(card)
-            title = BodyLabel(f"统计 {i+1}")
-            value = SubtitleLabel("0")
-            card_layout.addWidget(title)
-            card_layout.addWidget(value)
-            self.stats_cards.append((title, value))
-            layout.addWidget(card)
-
+        layout.addWidget(self.search_edit)
+        
+        # 类型筛选
+        layout.addWidget(BodyLabel("类型:"))
+        self.type_combo = ComboBox()
+        self.type_combo.addItems(["全部", "类", "函数", "模块", "变量", "概念"])
+        self.type_combo.setCurrentIndex(0)
+        self.type_combo.currentIndexChanged.connect(self._on_filter_changed)
+        layout.addWidget(self.type_combo)
+        
         layout.addStretch()
-
-        tab.setWidget(container)
-        return tab
-
+        
+        # 操作按钮
+        expand_all_btn = PushButton("全部展开")
+        expand_all_btn.clicked.connect(self._expand_all)
+        layout.addWidget(expand_all_btn)
+        
+        collapse_all_btn = PushButton("全部折叠")
+        collapse_all_btn.clicked.connect(self._collapse_all)
+        layout.addWidget(collapse_all_btn)
+        
+        refresh_btn = PushButton("刷新")
+        refresh_btn.setIcon(FluentIcon.SYNC)
+        refresh_btn.clicked.connect(self._load_knowledge)
+        layout.addWidget(refresh_btn)
+        
+        return toolbar
+    
+    def _create_tree_panel(self) -> QWidget:
+        """创建树形结构面板"""
+        panel = CardWidget()
+        layout = QVBoxLayout(panel)
+        
+        title = StrongBodyLabel("知识树")
+        layout.addWidget(title)
+        
+        # 树形控件
+        self.tree_widget = TreeWidget()
+        self.tree_widget.setHeaderLabels(["名称", "类型"])
+        self.tree_widget.itemClicked.connect(self._on_tree_item_clicked)
+        layout.addWidget(self.tree_widget)
+        
+        return panel
+    
+    def _create_list_panel(self) -> QWidget:
+        """创建列表面板"""
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 知识库条目列表
+        self.scroll_area = ScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        
+        self.entries_container = QWidget()
+        self.entries_layout = QVBoxLayout(self.entries_container)
+        self.entries_layout.setAlignment(Qt.AlignTop)
+        self.entries_layout.setSpacing(12)
+        
+        self.scroll_area.setWidget(self.entries_container)
+        layout.addWidget(self.scroll_area)
+        
+        return panel
+    
     def _load_knowledge(self):
         """加载知识库"""
-        # 加载浏览列表
-        category = self.category_combo.currentText()
-        if category == "全部":
-            category = None
-
-        entries = knowledge_service.get_by_category(category, limit=100)
-        self._populate_browse_table(entries)
-
-        # 加载统计
-        self._load_statistics()
-
-    def _populate_browse_table(self, entries):
-        """填充浏览表格"""
-        self.browse_table.setRowCount(len(entries))
-
-        for row, entry in enumerate(entries):
-            self.browse_table.setItem(row, 0, QTableWidgetItem(entry.title))
-            self.browse_table.setItem(row, 1, QTableWidgetItem(entry.category or "-"))
-            self.browse_table.setItem(row, 2, QTableWidgetItem(str(entry.access_count)))
-            self.browse_table.setItem(row, 3, QTableWidgetItem(
-                entry.created_at.strftime("%Y-%m-%d")
-            ))
-
-    def _load_statistics(self):
-        """加载统计信息"""
-        stats = knowledge_service.get_statistics()
-
-        # 更新统计卡片
-        labels = [
-            ("总条目数", f"{stats.total_entries}"),
-            ("最多访问", f"{stats.most_accessed[0].title if stats.most_accessed else '-'}"),
-            ("最新条目", f"{stats.recent_entries[0].title if stats.recent_entries else '-'}"),
-            ("热门标签", f"{', '.join(t[0] for t in stats.top_tags[:3])}"),
-        ]
-
-        for i, (title, value) in enumerate(labels):
-            if i < len(self.stats_cards):
-                title_widget, value_widget = self.stats_cards[i]
-                title_widget.setText(title)
-                value_widget.setText(value)
-
-    def _on_category_changed(self):
-        """分类变化处理"""
-        self._load_knowledge()
-
-    def _on_search(self):
-        """搜索处理"""
-        keyword = self.search_edit.text()
-        if len(keyword) < 2:
-            return
-
-        results = knowledge_service.search(keyword, limit=50)
-        self._populate_search_table(results, keyword)
-
-    def _on_search_button(self):
-        """搜索按钮处理"""
-        self._on_search()
-
-    def _populate_search_table(self, entries, keyword: str):
-        """填充搜索结果表格"""
-        self.search_table.setRowCount(len(entries))
-
-        for row, entry in enumerate(entries):
-            # 计算简单的匹配度
-            match_score = 0
-            if keyword.lower() in entry.title.lower():
-                match_score += 50
-            if keyword.lower() in entry.content.lower():
-                match_score += 30
-            if any(keyword.lower() in tag.lower() for tag in entry.tags):
-                match_score += 20
-
-            self.search_table.setItem(row, 0, QTableWidgetItem(entry.title))
-            self.search_table.setItem(row, 1, QTableWidgetItem(entry.category or "-"))
-            self.search_table.setItem(row, 2, QTableWidgetItem(f"{match_score}%"))
-
-            # 查看按钮
-            btn = PillPushButton("查看")
-            btn.clicked.connect(lambda checked, e=entry: self._show_entry_detail_by_id(e.id))
-            self.search_table.setCellWidget(row, 3, btn)
-
-    def _create_entry(self):
-        """创建条目"""
-        dialog = CreateEntryDialog(self)
-        if dialog.exec():
-            info = dialog.get_entry_info()
-            entry_id = knowledge_service.create_entry(info)
-            self.entryCreated.emit(entry_id)
-            self._load_knowledge()
-
+        try:
+            from ...database import get_db_session
+            with get_db_session() as session:
+                repo = KnowledgeRepository(session)
+                self.entries = repo.get_all_entries()
+            
+            self._refresh_tree()
+            self._refresh_list()
+            
             InfoBar.success(
-                title="知识条目已创建",
-                content=f"条目 ID: {entry_id}",
+                title="加载成功",
+                content=f"已加载 {len(self.entries)} 个知识条目",
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
                 duration=2000,
                 parent=self
             )
-
-    def _show_entry_detail(self, row: int, column: int):
-        """显示条目详情"""
-        entry_id = int(self.browse_table.item(row, 0).data(Qt.UserRole) or 0)
-        if entry_id:
-            self._show_entry_detail_by_id(entry_id)
-
-    def _show_entry_detail_by_id(self, entry_id: int):
-        """通过 ID 显示条目详情"""
-        entry = knowledge_service.get_entry(entry_id)
-        if entry:
-            dialog = EntryDetailDialog(entry, self)
-            dialog.exec()
-
-
-class CreateEntryDialog(QDialog):
-    """创建条目对话框"""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("新建知识条目")
-        self.setMinimumWidth(450)
-        self._setup_content()
-
-    def _setup_content(self):
-        """设置内容"""
-        from qfluentwidgets import LineEdit, TextEdit, ComboBox, PushButton
-
-        layout = QVBoxLayout(self)
-
-        # 标题
-        layout.addWidget(QLabel("标题:"))
-        self.title_edit = LineEdit()
-        self.title_edit.setPlaceholderText("条目标题...")
-        layout.addWidget(self.title_edit)
-
-        # 分类
-        layout.addWidget(QLabel("分类:"))
-        self.category_combo = ComboBox()
-        self.category_combo.addItems(knowledge_service.get_categories())
-        layout.addWidget(self.category_combo)
-
-        # 内容
-        layout.addWidget(QLabel("内容:"))
-        self.content_edit = TextEdit()
-        self.content_edit.setPlaceholderText("支持 Markdown 格式...")
-        self.content_edit.setMaximumHeight(150)
-        layout.addWidget(self.content_edit)
-
-        # 标签
-        layout.addWidget(QLabel("标签 (逗号分隔):"))
-        self.tags_edit = LineEdit()
-        self.tags_edit.setPlaceholderText("python, 最佳实践, 示例...")
-        layout.addWidget(self.tags_edit)
-
-        # 按钮
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-
-        ok_btn = PushButton("创建")
-        ok_btn.clicked.connect(self.accept)
-        button_layout.addWidget(ok_btn)
-
-        cancel_btn = PushButton("取消")
-        cancel_btn.clicked.connect(self.reject)
-        button_layout.addWidget(cancel_btn)
-
-        layout.addLayout(button_layout)
-
-    def get_entry_info(self) -> KnowledgeCreateInfo:
-        """获取条目信息"""
-        tags = [t.strip() for t in self.tags_edit.text().split(",") if t.strip()]
-        return KnowledgeCreateInfo(
-            title=self.title_edit.text(),
-            content=self.content_edit.toPlainText(),
-            category=self.category_combo.currentText(),
-            tags=tags,
-        )
-
-
-class EntryDetailDialog(QDialog):
-    """条目详情对话框"""
-
-    def __init__(self, entry, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(entry.title)
-        self.setMinimumWidth(500)
-        self.entry = entry
-        self._setup_content()
-
-        # 标记为已访问
-        knowledge_service.mark_helpful(entry.id)
-
-    def _setup_content(self):
-        """设置内容"""
-        from qfluentwidgets import TextEdit, PushButton
-
-        layout = QVBoxLayout(self)
-
-        # 分类和标签
-        info_text = f"分类: {self.entry.category or '-'}"
-        if self.entry.tags:
-            info_text += f"  |  标签: {', '.join(self.entry.tags)}"
-        info_text += f"  |  访问: {self.entry.access_count} 次"
-
-        layout.addWidget(QLabel(info_text))
-
-        # 内容
-        content_display = TextEdit()
-        content_display.setPlainText(self.entry.content)
-        content_display.setReadOnly(True)
-        content_display.setMaximumHeight(300)
-        layout.addWidget(content_display)
-
-        # 关闭按钮
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-
-        close_btn = PushButton("关闭")
-        close_btn.clicked.connect(self.accept)
-        button_layout.addWidget(close_btn)
-
-        layout.addLayout(button_layout)
+            
+        except Exception as e:
+            InfoBar.error(
+                title="加载失败",
+                content=str(e),
+                orient=Qt.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self
+            )
+    
+    def _refresh_tree(self):
+        """刷新树形结构"""
+        self.tree_widget.clear()
+        
+        # 按文件路径分组
+        file_groups = {}
+        for entry in self.entries:
+            file_path = entry.file_path or "未分类"
+            if file_path not in file_groups:
+                file_groups[file_path] = []
+            file_groups[file_path].append(entry)
+        
+        # 构建树
+        for file_path, entries in file_groups.items():
+            file_item = QTreeWidgetItem([file_path, "文件"])
+            self.tree_widget.addTopLevelItem(file_item)
+            
+            for entry in entries:
+                entry_item = QTreeWidgetItem([entry.title or "无标题", entry.type.value])
+                file_item.addChild(entry_item)
+        
+        # 展开所有项
+        self.tree_widget.expandAll()
+    
+    def _refresh_list(self):
+        """刷新列表显示"""
+        # 清空现有列表
+        while self.entries_layout.count():
+            item = self.entries_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # 获取筛选条件
+        search_text = self.search_edit.text().lower()
+        type_filter = self.type_combo.currentText()
+        
+        # 筛选并添加条目
+        for entry in self.entries:
+            # 应用筛选条件
+            if type_filter != "全部" and entry.type.value != type_filter:
+                continue
+            if search_text:
+                if entry.title and search_text not in entry.title.lower():
+                    if entry.content and search_text not in entry.content.lower():
+                        continue
+            
+            section = CollapsibleSection(entry)
+            self.entries_layout.addWidget(section)
+    
+    def _on_tree_item_clicked(self, item, column):
+        """树形项目点击处理"""
+        # 可以在这里实现点击树形项目后高亮对应的列表项
+        pass
+    
+    def _on_search(self, text: str):
+        """搜索处理"""
+        self._refresh_list()
+    
+    def _on_filter_changed(self):
+        """筛选条件改变"""
+        self._refresh_list()
+    
+    def _expand_all(self):
+        """展开所有条目"""
+        for i in range(self.entries_layout.count()):
+            item = self.entries_layout.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                if isinstance(widget, CollapsibleSection):
+                    widget.set_expanded(True)
+    
+    def _collapse_all(self):
+        """折叠所有条目"""
+        for i in range(self.entries_layout.count()):
+            item = self.entries_layout.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                if isinstance(widget, CollapsibleSection):
+                    widget.set_expanded(False)

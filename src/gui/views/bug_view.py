@@ -1,269 +1,302 @@
 """
 Bug 视图
-Bug 追踪界面
+Bug 列表和详情界面（带折叠功能）
 """
-from PySide6.QtCore import Qt, Signal
+from typing import Optional, List
+from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
-    QTableWidgetItem, QHeaderView, QAbstractItemView
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QScrollArea, QLabel, QFrame
 )
 from qfluentwidgets import (
-    PushButton, SearchLineEdit, ComboBox, PrimaryPushButton,
-    BodyLabel, StrongBodyLabel, CardWidget,
-    TableWidget, InfoBar, InfoBarPosition,
-    FluentIcon
+    CardWidget, PushButton, BodyLabel, StrongBodyLabel,
+    InfoBar, InfoBarPosition, SearchLineEdit, ToolButton,
+    FluentIcon, ScrollArea, TransparentToolButton,
+    SubtitleLabel, PillPushButton, ComboBox
 )
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QTextEdit
 
-from ...services import bug_service, BugCreateInfo, BugStatus
-from ...models import BugStatus as BugStatusEnum
+from ...database.repositories import BugRepository
+from ...database.models import Bug, BugSeverity
+
+
+class CollapsibleCard(CardWidget):
+    """可折叠的卡片"""
+    
+    def __init__(self, title: str, parent=None):
+        super().__init__(parent)
+        self._is_expanded = True
+        self._setup_ui(title)
+    
+    def _setup_ui(self, title: str):
+        """设置界面"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(12)
+        
+        # 标题栏
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 折叠按钮
+        self.toggle_btn = TransparentToolButton(FluentIcon.CARET_DOWN)
+        self.toggle_btn.setFixedSize(32, 32)
+        self.toggle_btn.clicked.connect(self._toggle)
+        header_layout.addWidget(self.toggle_btn)
+        
+        # 标题
+        self.title_label = StrongBodyLabel(title)
+        header_layout.addWidget(self.title_label)
+        
+        header_layout.addStretch()
+        
+        layout.addWidget(header)
+        
+        # 内容容器
+        self.content_widget = QWidget()
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+        
+        layout.addWidget(self.content_widget)
+    
+    def _toggle(self):
+        """切换折叠状态"""
+        self._is_expanded = not self._is_expanded
+        
+        # 更新按钮图标
+        if self._is_expanded:
+            self.toggle_btn.setIcon(FluentIcon.CARET_DOWN)
+            self.content_widget.show()
+        else:
+            self.toggle_btn.setIcon(FluentIcon.CARET_RIGHT)
+            self.content_widget.hide()
+    
+    def add_content(self, widget):
+        """添加内容"""
+        self.content_layout.addWidget(widget)
+    
+    def is_expanded(self) -> bool:
+        """是否展开"""
+        return self._is_expanded
+    
+    def set_expanded(self, expanded: bool):
+        """设置展开状态"""
+        if self._is_expanded != expanded:
+            self._toggle()
+
+
+class BugCard(CollapsibleCard):
+    """Bug 卡片"""
+    
+    def __init__(self, bug: Bug, parent=None):
+        title = f"#{bug.id} - {bug.title}"
+        super().__init__(title, parent)
+        self.bug = bug
+        self._setup_content()
+    
+    def _setup_content(self):
+        """设置内容"""
+        # 严重程度
+        severity_colors = {
+            BugSeverity.CRITICAL: "#d13438",
+            BugSeverity.HIGH: "#ff6b35",
+            BugSeverity.MEDIUM: "#ffaa00",
+            BugSeverity.LOW: "#0078d4"
+        }
+        
+        severity_label = BodyLabel(f"严重程度: {self.bug.severity.value}")
+        severity_label.setStyleSheet(f"color: {severity_colors.get(self.bug.severity, '#000')}; font-weight: bold;")
+        self.add_content(severity_label)
+        
+        # 状态
+        status_label = BodyLabel(f"状态: {self.bug.status.value}")
+        self.add_content(status_label)
+        
+        # 描述
+        if self.bug.description:
+            desc_label = BodyLabel(f"描述: {self.bug.description}")
+            desc_label.setWordWrap(True)
+            self.add_content(desc_label)
+        
+        # 文件路径
+        if self.bug.file_path:
+            file_label = BodyLabel(f"文件: {self.bug.file_path}")
+            file_label.setStyleSheet("color: #666;")
+            self.add_content(file_label)
+        
+        # 代码位置
+        if self.bug.line_number:
+            line_label = BodyLabel(f"行号: {self.bug.line_number}")
+            self.add_content(line_label)
 
 
 class BugView(QWidget):
-    """Bug 视图"""
-
-    bugCreated = Signal(int)  # Bug 创建信号
-
+    """
+    Bug 视图
+    显示 Bug 列表和详情（带折叠功能）
+    """
+    
     def __init__(self, parent=None):
         super().__init__(parent)
-        # 设置 objectName（FluentWindow 要求）
         self.setObjectName("bugView")
-
+        
+        self.bugs: List[Bug] = []
         self._setup_ui()
         self._load_bugs()
-
+    
     def _setup_ui(self):
         """设置界面"""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(16)
-
-        # 标题和统计
-        header = self._create_header()
-        layout.addWidget(header)
-
+        
+        # 标题
+        title = SubtitleLabel("Bug 追踪")
+        layout.addWidget(title)
+        
         # 工具栏
         toolbar = self._create_toolbar()
         layout.addWidget(toolbar)
-
-        # 表格
-        self.table = TableWidget()
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels(["ID", "标题", "状态", "错误类型", "创建时间", "操作"])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setAlternatingRowColors(True)
-        layout.addWidget(self.table)
-
-    def _create_header(self) -> QWidget:
-        """创建头部"""
-        header = QWidget()
-        layout = QHBoxLayout(header)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        title = StrongBodyLabel("Bug 追踪")
-        layout.addWidget(title)
-
-        layout.addStretch()
-
-        # 统计标签
-        self.stats_label = BodyLabel("总计: 0")
-        layout.addWidget(self.stats_label)
-
-        return header
-
+        
+        # Bug 列表区域
+        self.scroll_area = ScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        
+        self.bugs_container = QWidget()
+        self.bugs_layout = QVBoxLayout(self.bugs_container)
+        self.bugs_layout.setAlignment(Qt.AlignTop)
+        self.bugs_layout.setSpacing(12)
+        
+        self.scroll_area.setWidget(self.bugs_container)
+        layout.addWidget(self.scroll_area)
+    
     def _create_toolbar(self) -> QWidget:
         """创建工具栏"""
         toolbar = QWidget()
         layout = QHBoxLayout(toolbar)
         layout.setContentsMargins(0, 0, 0, 0)
-
+        
         # 搜索框
         layout.addWidget(BodyLabel("搜索:"))
         self.search_edit = SearchLineEdit()
         self.search_edit.setPlaceholderText("搜索 Bug...")
-        self.search_edit.setFixedWidth(200)
+        self.search_edit.setFixedWidth(300)
         self.search_edit.textChanged.connect(self._on_search)
         layout.addWidget(self.search_edit)
-
-        # 状态筛选
+        
+        # 筛选
+        layout.addWidget(BodyLabel("严重程度:"))
+        self.severity_combo = ComboBox()
+        self.severity_combo.addItems(["全部", "严重", "高", "中", "低"])
+        self.severity_combo.setCurrentIndex(0)
+        self.severity_combo.currentIndexChanged.connect(self._on_filter_changed)
+        layout.addWidget(self.severity_combo)
+        
         layout.addWidget(BodyLabel("状态:"))
         self.status_combo = ComboBox()
-        self.status_combo.addItems(["全部", "待处理", "处理中", "已修复", "已关闭"])
-        self.status_combo.currentTextChanged.connect(self._on_filter_changed)
+        self.status_combo.addItems(["全部", "待处理", "进行中", "已修复", "已关闭"])
+        self.status_combo.setCurrentIndex(0)
+        self.status_combo.currentIndexChanged.connect(self._on_filter_changed)
         layout.addWidget(self.status_combo)
-
+        
         layout.addStretch()
-
-        # 新建 Bug 按钮
-        create_btn = PrimaryPushButton("新建 Bug")
-        create_btn.clicked.connect(self._create_bug)
-        layout.addWidget(create_btn)
-
-        # 刷新按钮
+        
+        # 操作按钮
+        expand_all_btn = PushButton("全部展开")
+        expand_all_btn.clicked.connect(self._expand_all)
+        layout.addWidget(expand_all_btn)
+        
+        collapse_all_btn = PushButton("全部折叠")
+        collapse_all_btn.clicked.connect(self._collapse_all)
+        layout.addWidget(collapse_all_btn)
+        
         refresh_btn = PushButton("刷新")
+        refresh_btn.setIcon(FluentIcon.SYNC)
         refresh_btn.clicked.connect(self._load_bugs)
         layout.addWidget(refresh_btn)
-
+        
         return toolbar
-
+    
     def _load_bugs(self):
         """加载 Bug 列表"""
-        # 获取筛选状态
-        status_text = self.status_combo.currentText()
-        status = self._get_status_filter(status_text)
-
-        # 获取 Bug 列表
-        bugs = bug_service.list_bugs(status=status, limit=100)
-
-        self._populate_table(bugs)
-        self._update_stats(bugs)
-
-    def _populate_table(self, bugs):
-        """填充表格"""
-        self.table.setRowCount(len(bugs))
-
-        for row, bug in enumerate(bugs):
-            self.table.setItem(row, 0, QTableWidgetItem(str(bug.id)))
-            self.table.setItem(row, 1, QTableWidgetItem(bug.title))
-            self.table.setItem(row, 2, QTableWidgetItem(self._get_status_label(bug.status)))
-            self.table.setItem(row, 3, QTableWidgetItem(bug.error_type or "-"))
-            self.table.setItem(row, 4, QTableWidgetItem(
-                bug.created_at.strftime("%Y-%m-%d %H:%M")
-            ))
-
-            # 操作按钮
-            btn_widget = QWidget()
-            btn_layout = QHBoxLayout(btn_widget)
-            btn_layout.setContentsMargins(4, 4, 4, 4)
-
-            # 标记修复按钮
-            fix_btn = PushButton("修复")
-            fix_btn.clicked.connect(lambda checked, b=bug.id: self._mark_fixed(b))
-            btn_layout.addWidget(fix_btn)
-
-            self.table.setCellWidget(row, 5, btn_widget)
-
-    def _get_status_filter(self, text: str):
-        """获取状态过滤器"""
-        mapping = {
-            "全部": None,
-            "待处理": BugStatus.PENDING,
-            "处理中": BugStatus.IN_PROGRESS,
-            "已修复": BugStatus.FIXED,
-            "已关闭": BugStatus.CLOSED,
-        }
-        return mapping.get(text)
-
-    def _get_status_label(self, status: BugStatus) -> str:
-        """获取状态标签"""
-        mapping = {
-            BugStatus.PENDING: "待处理",
-            BugStatus.IN_PROGRESS: "处理中",
-            BugStatus.FIXED: "已修复",
-            BugStatus.CLOSED: "已关闭",
-        }
-        return mapping.get(status, "未知")
-
-    def _update_stats(self, bugs):
-        """更新统计"""
-        self.stats_label.setText(f"总计: {len(bugs)}")
-
-    def _create_bug(self):
-        """创建 Bug"""
-        dialog = CreateBugDialog(self)
-        if dialog.exec():
-            info = dialog.get_bug_info()
-            bug_id = bug_service.create_bug(info)
-            self.bugCreated.emit(bug_id)
-            self._load_bugs()
-
+        try:
+            from ...database import get_db_session
+            with get_db_session() as session:
+                repo = BugRepository(session)
+                self.bugs = repo.get_all_bugs()
+            
+            self._refresh_bug_list()
+            
             InfoBar.success(
-                title="Bug 已创建",
-                content=f"Bug ID: {bug_id}",
+                title="加载成功",
+                content=f"已加载 {len(self.bugs)} 个 Bug",
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
                 duration=2000,
                 parent=self
             )
-
-    def _mark_fixed(self, bug_id: int):
-        """标记为已修复"""
-        if bug_service.mark_fixed(bug_id):
-            self._load_bugs()
-            InfoBar.success(
-                title="Bug 已标记为修复",
-                content="",
+            
+        except Exception as e:
+            InfoBar.error(
+                title="加载失败",
+                content=str(e),
                 orient=Qt.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
-                duration=2000,
+                duration=5000,
                 parent=self
             )
-
+    
+    def _refresh_bug_list(self):
+        """刷新 Bug 列表显示"""
+        # 清空现有列表
+        while self.bugs_layout.count():
+            item = self.bugs_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # 获取筛选条件
+        search_text = self.search_edit.text().lower()
+        severity_filter = self.severity_combo.currentText()
+        status_filter = self.status_combo.currentText()
+        
+        # 筛选并添加 Bug 卡片
+        for bug in self.bugs:
+            # 应用筛选条件
+            if severity_filter != "全部" and bug.severity.value != severity_filter:
+                continue
+            if status_filter != "全部" and bug.status.value != status_filter:
+                continue
+            if search_text and search_text not in bug.title.lower() and bug.description:
+                if search_text not in bug.description.lower():
+                    continue
+            
+            bug_card = BugCard(bug)
+            self.bugs_layout.addWidget(bug_card)
+    
     def _on_search(self, text: str):
         """搜索处理"""
-        bugs = bug_service.search_bugs(text, limit=100)
-        self._populate_table(bugs)
-
+        self._refresh_bug_list()
+    
     def _on_filter_changed(self):
-        """筛选变化处理"""
-        self._load_bugs()
-
-
-class CreateBugDialog(QDialog):
-    """创建 Bug 对话框"""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("新建 Bug")
-        self.setMinimumWidth(400)
-        self._setup_content()
-
-    def _setup_content(self):
-        """设置内容"""
-        from qfluentwidgets import LineEdit, TextEdit, PushButton
-
-        layout = QVBoxLayout(self)
-
-        # 标题
-        layout.addWidget(QLabel("标题:"))
-        self.title_edit = LineEdit()
-        self.title_edit.setPlaceholderText("Bug 标题...")
-        layout.addWidget(self.title_edit)
-
-        # 描述
-        layout.addWidget(QLabel("描述:"))
-        self.description_edit = TextEdit()
-        self.description_edit.setPlaceholderText("详细描述...")
-        self.description_edit.setMaximumHeight(100)
-        layout.addWidget(self.description_edit)
-
-        # 错误类型
-        layout.addWidget(QLabel("错误类型:"))
-        self.error_type_edit = LineEdit()
-        self.error_type_edit.setPlaceholderText("如: ValueError, TypeError...")
-        layout.addWidget(self.error_type_edit)
-
-        # 按钮
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-
-        ok_btn = PushButton("创建")
-        ok_btn.clicked.connect(self.accept)
-        button_layout.addWidget(ok_btn)
-
-        cancel_btn = PushButton("取消")
-        cancel_btn.clicked.connect(self.reject)
-        button_layout.addWidget(cancel_btn)
-
-        layout.addLayout(button_layout)
-
-    def get_bug_info(self) -> BugCreateInfo:
-        """获取 Bug 信息"""
-        return BugCreateInfo(
-            title=self.title_edit.text(),
-            description=self.description_edit.toPlainText(),
-            error_type=self.error_type_edit.text(),
-        )
+        """筛选条件改变"""
+        self._refresh_bug_list()
+    
+    def _expand_all(self):
+        """展开所有卡片"""
+        for i in range(self.bugs_layout.count()):
+            item = self.bugs_layout.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                if isinstance(widget, BugCard):
+                    widget.set_expanded(True)
+    
+    def _collapse_all(self):
+        """折叠所有卡片"""
+        for i in range(self.bugs_layout.count()):
+            item = self.bugs_layout.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                if isinstance(widget, BugCard):
+                    widget.set_expanded(False)

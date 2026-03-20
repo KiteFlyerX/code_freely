@@ -47,6 +47,9 @@ class DatabaseManager:
         """初始化数据库连接"""
         db_path = self._get_database_path()
 
+        # 检查并清理旧的锁文件
+        self._cleanup_stale_locks(db_path)
+
         # 创建 SQLite 引擎
         url = f"sqlite:///{db_path}"
 
@@ -54,11 +57,21 @@ class DatabaseManager:
             url,
             connect_args={
                 "check_same_thread": False,
-                "timeout": 30,  # 30秒超时，避免锁定问题
+                "timeout": 60,  # 增加到60秒超时，避免锁定问题
             },
-            poolclass=StaticPool,  # 单连接模式，适合 SQLite
+            pool_size=5,  # 连接池大小
+            max_overflow=10,  # 最大溢出连接数
+            pool_pre_ping=True,  # 连接前先检测，使用连接池自动管理
             echo=False,  # 设为 True 可查看 SQL 日志
         )
+
+        # 启用 WAL 模式以提高并发性能
+        from sqlalchemy import text
+        with self._engine.connect() as conn:
+            conn.execute(text("PRAGMA journal_mode=WAL"))
+            conn.execute(text("PRAGMA busy_timeout=60000"))  # 60秒忙等待
+            conn.execute(text("PRAGMA synchronous=NORMAL"))  # 更好的性能
+            conn.commit()
 
         # 创建会话工厂
         self._session_factory = scoped_session(
@@ -69,6 +82,20 @@ class DatabaseManager:
                 expire_on_commit=False  # 避免对象过期问题
             )
         )
+
+    def _cleanup_stale_locks(self, db_path: Path):
+        """清理过期的数据库锁文件"""
+        import glob
+        try:
+            # 查找并删除 -wal 和 -shm 文件
+            for pattern in [f"{db_path}-wal", f"{db_path}-shm"]:
+                for lock_file in glob.glob(str(pattern)):
+                    try:
+                        Path(lock_file).unlink(missing_ok=True)
+                    except Exception:
+                        pass  # 忽略删除失败的文件
+        except Exception:
+            pass  # 忽略清理错误
 
     @property
     def engine(self) -> Engine:

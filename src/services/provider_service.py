@@ -218,24 +218,35 @@ class ProviderManager:
         return get_db_session()
 
     def get_providers(self) -> List[ProviderConfig]:
-        """获取所有提供商配置"""
-        session = self._get_session()
-        try:
-            configs = session.query(SystemConfig).filter(
-                SystemConfig.key.like("provider_%")
-            ).all()
+        """获取所有提供商配置（带重试机制）"""
+        import time
+        max_retries = 3
+        retry_delay = 0.1
 
-            providers = []
-            for cfg in configs:
-                try:
-                    provider_data = json.loads(cfg.value)
-                    providers.append(ProviderConfig.from_dict(provider_data))
-                except (json.JSONDecodeError, ValueError):
+        for attempt in range(max_retries):
+            session = self._get_session()
+            try:
+                configs = session.query(SystemConfig).filter(
+                    SystemConfig.key.like("provider_%")
+                ).all()
+
+                providers = []
+                for cfg in configs:
+                    try:
+                        provider_data = json.loads(cfg.value)
+                        providers.append(ProviderConfig.from_dict(provider_data))
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+
+                return providers
+            except Exception as e:
+                error_str = str(e).lower()
+                if ("database is locked" in error_str or "locked" in error_str) and attempt < max_retries - 1:
+                    time.sleep(retry_delay)
                     continue
-
-            return providers
-        finally:
-            session.close()
+                raise
+            finally:
+                session.close()
 
     def get_active_provider(self) -> Optional[ProviderConfig]:
         """获取当前活动的提供商"""
@@ -306,22 +317,35 @@ class ProviderManager:
             session.close()
 
     def _set_config(self, key: str, value: str):
-        """设置配置项"""
-        session = self._get_session()
-        try:
-            config = session.query(SystemConfig).filter(
-                SystemConfig.key == key
-            ).first()
+        """设置配置项（带重试机制）"""
+        import time
+        max_retries = 5
+        retry_delay = 0.2  # 200ms
 
-            if config:
-                config.value = value
-            else:
-                config = SystemConfig(key=key, value=value)
-                session.add(config)
+        for attempt in range(max_retries):
+            session = self._get_session()
+            try:
+                config = session.query(SystemConfig).filter(
+                    SystemConfig.key == key
+                ).first()
 
-            session.commit()
-        finally:
-            session.close()
+                if config:
+                    config.value = value
+                else:
+                    config = SystemConfig(key=key, value=value)
+                    session.add(config)
+
+                session.commit()
+                return
+            except Exception as e:
+                session.rollback()
+                error_str = str(e).lower()
+                if ("database is locked" in error_str or "locked" in error_str) and attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))  # 指数退避
+                    continue
+                raise
+            finally:
+                session.close()
 
     def _get_config(self, key: str) -> Optional[str]:
         """获取配置项"""
@@ -335,53 +359,75 @@ class ProviderManager:
             session.close()
 
     def _delete_config(self, key: str):
-        """删除配置项"""
-        session = self._get_session()
-        try:
-            config = session.query(SystemConfig).filter(
-                SystemConfig.key == key
-            ).first()
-            if config:
-                session.delete(config)
-                session.commit()
-        finally:
-            session.close()
+        """删除配置项（带重试机制）"""
+        import time
+        max_retries = 5
+        retry_delay = 0.2
 
-    def add_provider(self, config: ProviderConfig) -> bool:
-        """添加提供商配置"""
-        try:
-            # 保存到数据库
-            config_data = json.dumps(config.to_dict())
-
-            # 检查是否已存在
+        for attempt in range(max_retries):
             session = self._get_session()
             try:
-                existing = session.query(SystemConfig).filter(
-                    SystemConfig.key == f"provider_{config.id}"
+                config = session.query(SystemConfig).filter(
+                    SystemConfig.key == key
                 ).first()
-
-                if existing:
-                    existing.value = config_data
-                else:
-                    new_config = SystemConfig(
-                        key=f"provider_{config.id}",
-                        value=config_data,
-                        description=f"AI Provider: {config.name}"
-                    )
-                    session.add(new_config)
-
-                session.commit()
+                if config:
+                    session.delete(config)
+                    session.commit()
+                return
+            except Exception as e:
+                session.rollback()
+                error_str = str(e).lower()
+                if ("database is locked" in error_str or "locked" in error_str) and attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))
+                    continue
+                raise
             finally:
                 session.close()
 
-            # 如果这是第一个提供商，设为默认
-            if self.get_providers_count() == 1:
-                self._set_config("default_provider_id", config.id)
+    def add_provider(self, config: ProviderConfig) -> bool:
+        """添加提供商配置"""
+        import time
+        max_retries = 5
+        retry_delay = 0.2  # 200ms
 
-            return True
-        except Exception as e:
-            print(f"添加提供商失败: {e}")
-            return False
+        for attempt in range(max_retries):
+            try:
+                # 保存到数据库
+                config_data = json.dumps(config.to_dict())
+
+                # 检查是否已存在
+                session = self._get_session()
+                try:
+                    existing = session.query(SystemConfig).filter(
+                        SystemConfig.key == f"provider_{config.id}"
+                    ).first()
+
+                    if existing:
+                        existing.value = config_data
+                    else:
+                        new_config = SystemConfig(
+                            key=f"provider_{config.id}",
+                            value=config_data,
+                            description=f"AI Provider: {config.name}"
+                        )
+                        session.add(new_config)
+
+                    session.commit()
+                finally:
+                    session.close()
+
+                # 如果这是第一个提供商，设为默认
+                if self.get_providers_count() == 1:
+                    self._set_config("default_provider_id", config.id)
+
+                return True
+            except Exception as e:
+                error_str = str(e).lower()
+                if ("database is locked" in error_str or "locked" in error_str) and attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))  # 指数退避
+                    continue
+                print(f"添加提供商失败: {e}")
+                return False
 
     def switch_provider(self, provider_id: str) -> bool:
         """切换到指定提供商"""
@@ -416,25 +462,37 @@ class ProviderManager:
             return False
 
     def update_provider(self, provider_id: str, config: ProviderConfig) -> bool:
-        """更新提供商配置"""
-        try:
-            config_data = json.dumps(config.to_dict())
-            session = self._get_session()
-            try:
-                existing = session.query(SystemConfig).filter(
-                    SystemConfig.key == f"provider_{provider_id}"
-                ).first()
+        """更新提供商配置（带重试机制）"""
+        import time
+        max_retries = 5
+        retry_delay = 0.2  # 200ms
 
-                if existing:
-                    existing.value = config_data
-                    session.commit()
-                    return True
+        for attempt in range(max_retries):
+            try:
+                config_data = json.dumps(config.to_dict())
+                session = self._get_session()
+                try:
+                    existing = session.query(SystemConfig).filter(
+                        SystemConfig.key == f"provider_{provider_id}"
+                    ).first()
+
+                    if existing:
+                        existing.value = config_data
+                        session.commit()
+                        return True
+                    return False
+                except Exception as e:
+                    session.rollback()
+                    raise
+                finally:
+                    session.close()
+            except Exception as e:
+                error_str = str(e).lower()
+                if ("database is locked" in error_str or "locked" in error_str) and attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))  # 指数退避
+                    continue
+                print(f"更新提供商失败: {e}")
                 return False
-            finally:
-                session.close()
-        except Exception as e:
-            print(f"更新提供商失败: {e}")
-            return False
 
     def get_providers_count(self) -> int:
         """获取提供商数量"""

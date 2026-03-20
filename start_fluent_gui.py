@@ -24,7 +24,7 @@ from qfluentwidgets import (
     InfoBarIcon, Icon, PlainTextEdit
 )
 
-from PySide6.QtCore import Qt, Signal, QEvent
+from PySide6.QtCore import Qt, Signal, QEvent, QTimer
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QStackedWidget, QApplication, QFileDialog, QHeaderView
@@ -91,6 +91,67 @@ def format_chat_message(content):
     return render_markdown(content)
 
 
+class ThinkingIndicator(QWidget):
+    """思考中动画指示器"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._dots = 0
+        self._setup_ui()
+        
+        # 动画定时器
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._update_animation)
+        
+    def _setup_ui(self):
+        """设置界面"""
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(8)
+        
+        # 图标和文字
+        icon_label = QLabel("🤔")
+        icon_label.setFont(QFont("Segoe UI Emoji", 16))
+        layout.addWidget(icon_label)
+        
+        self.text_label = StrongBodyLabel("AI 思考中")
+        self.text_label.setStyleSheet("color: #0078d4;")
+        layout.addWidget(self.text_label)
+        
+        # 动态点
+        self.dots_label = BodyLabel("")
+        self.dots_label.setStyleSheet("color: #0078d4;")
+        layout.addWidget(self.dots_label)
+        
+        layout.addStretch()
+        
+        # 设置整体样式
+        self.setStyleSheet("""
+            ThinkingIndicator {
+                background-color: #e3f2fd;
+                border-radius: 12px;
+                border: 2px solid #0078d4;
+            }
+        """)
+        
+    def start_animation(self):
+        """开始动画"""
+        self._dots = 0
+        self.timer.start(400)  # 每400ms更新一次
+        self.show()
+        
+    def stop_animation(self):
+        """停止动画"""
+        self.timer.stop()
+        self.hide()
+        
+    def _update_animation(self):
+        """更新动画"""
+        self._dots = (self._dots + 1) % 4
+        dots = "." * self._dots
+        self.dots_label.setText(dots)
+
+
 class ChatWidget(QWidget):
     """聊天页面"""
 
@@ -99,6 +160,7 @@ class ChatWidget(QWidget):
         self.setObjectName("chatWidget")
         self.chat_conversation_id = None
         self._is_processing = False
+        self._cancel_requested = False
 
         # 当前工作目录
         self.current_work_dir = Path.cwd()
@@ -206,6 +268,14 @@ class ChatWidget(QWidget):
         button_layout.addWidget(change_dir_btn)
 
         button_layout.addStretch()
+
+        # 停止按钮（初始隐藏）
+        self.stop_btn = PushButton("停止")
+        self.stop_btn.setIcon(FluentIcon.CANCEL)
+        self.stop_btn.clicked.connect(self._on_stop)
+        self.stop_btn.setVisible(False)
+        self.stop_btn.setStyleSheet("background-color: #d13438; color: white;")
+        button_layout.addWidget(self.stop_btn)
 
         # 右侧发送按钮
         self.send_btn = PrimaryPushButton("发送")
@@ -323,7 +393,6 @@ class ChatWidget(QWidget):
                 parent=self
             )
             # 延迟更新 token 统计，避免数据库锁定
-            from PySide6.QtCore import QTimer
             QTimer.singleShot(100, self._update_token_stats)
         except Exception as e:
             InfoBar.error(
@@ -335,6 +404,50 @@ class ChatWidget(QWidget):
                 duration=5000,
                 parent=self
             )
+
+    def _show_thinking_indicator(self):
+        """显示思考动画"""
+        # 在聊天区域添加思考指示器
+        cursor = self.chat_area.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        self.chat_area.setTextCursor(cursor)
+        
+        # 插入思考动画文本
+        self.chat_area.append("\n🤔 AI 思考中...")
+        
+        # 启动点号动画
+        self._thinking_dots = 0
+        self._thinking_timer = QTimer(self)
+        self._thinking_timer.timeout.connect(self._update_thinking_dots)
+        self._thinking_timer.start(400)  # 每400ms更新一次
+
+    def _update_thinking_dots(self):
+        """更新思考动画的点号"""
+        self._thinking_dots = (self._thinking_dots + 1) % 4
+        dots = "." * self._thinking_dots
+        
+        # 更新最后一行
+        cursor = self.chat_area.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        cursor.select(QTextCursor.LineUnderCursor)
+        cursor.removeSelectedText()
+        cursor.insertText(f"🤔 AI 思考中{dots}")
+        
+        # 滚动到底部
+        scrollbar = self.chat_area.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+    def _hide_thinking_indicator(self):
+        """隐藏思考动画"""
+        if hasattr(self, '_thinking_timer'):
+            self._thinking_timer.stop()
+            
+            # 删除思考中的文本
+            cursor = self.chat_area.textCursor()
+            cursor.movePosition(QTextCursor.End)
+            cursor.select(QTextCursor.LineUnderCursor)
+            cursor.removeSelectedText()
+            cursor.deletePreviousChar()  # 删除换行符
 
     def _on_send(self):
         """发送消息"""
@@ -351,6 +464,10 @@ class ChatWidget(QWidget):
 
         # 禁用输入
         self._set_processing(True)
+        self._cancel_requested = False
+
+        # 显示思考动画
+        self._show_thinking_indicator()
 
         # 同步自动提交选项到配置
         from src.services.config_service import config_service
@@ -372,6 +489,9 @@ class ChatWidget(QWidget):
                     async for chunk in conversation_service.send_message_with_tools_stream(
                         self.chat_conversation_id, content, self.current_work_dir
                     ):
+                        # 检查是否取消
+                        if self._cancel_requested:
+                            break
                         # 实时发送每个 chunk
                         result_queue.put({"status": "chunk", "content": chunk})
 
@@ -384,7 +504,7 @@ class ChatWidget(QWidget):
                     loop.run_until_complete(loop.shutdown_asyncgens())
                     loop.close()
 
-                result_queue.put({"status": "done"})
+                result_queue.put({"status": "done", "cancelled": self._cancel_requested})
             except Exception as e:
                 result_queue.put({"status": "error", "data": str(e)})
                 result_queue.put({"status": "done"})
@@ -392,19 +512,22 @@ class ChatWidget(QWidget):
         threading.Thread(target=run_chat, daemon=True).start()
 
         # 轮询结果并实时显示
-        from PySide6.QtCore import QTimer
-
         def check_result():
             try:
                 while True:
                     result = result_queue.get_nowait()
                     if result.get("status") == "done":
+                        self._hide_thinking_indicator()
+                        if result.get("cancelled"):
+                            self.chat_area.append("\n⚠️ 生成已取消")
                         self._set_processing(False)
                         self.chat_input.setFocus()
                         # 延迟更新 token 统计，避免数据库锁定
                         QTimer.singleShot(100, self._update_token_stats)
                         return
                     elif result.get("status") == "chunk":
+                        # 隐藏思考动画（收到第一个chunk时）
+                        self._hide_thinking_indicator()
                         # 实时显示流式内容
                         chunk = result.get("content", "")
                         # 移动光标到末尾并插入文本
@@ -413,17 +536,28 @@ class ChatWidget(QWidget):
                         self.chat_area.setTextCursor(cursor)
                         self.chat_area.insertPlainText(chunk)
                     elif result.get("status") == "error":
+                        self._hide_thinking_indicator()
                         self.chat_area.append(f"\n[错误] {result.get('data', '')}")
             except queue.Empty:
                 QTimer.singleShot(10, check_result)
 
         QTimer.singleShot(10, check_result)
 
+    def _on_stop(self):
+        """停止生成"""
+        self._cancel_requested = True
+        self._hide_thinking_indicator()
+        self._set_processing(False)
+        
+        # 添加取消提示
+        self.chat_area.append("\n⚠️ 正在取消生成...")
+
     def _set_processing(self, processing):
         """设置处理状态"""
         self._is_processing = processing
         self.send_btn.setEnabled(not processing)
         self.chat_input.setEnabled(not processing)
+        self.stop_btn.setVisible(processing)  # 显示/隐藏停止按钮
         self.send_btn.setText("思考中..." if processing else "发送")
 
     def _update_token_stats(self):

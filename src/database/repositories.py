@@ -392,3 +392,124 @@ class ConfigRepository(BaseRepository):
         """获取所有配置"""
         configs = self.session.scalars(select(SystemConfig)).all()
         return {c.key: c.value for c in configs}
+
+
+# ========== 新增的存储库类 ==========
+
+# 导入新模型
+try:
+    from ..models import Bug, BugSeverity, HistoryEntry, IssueSeverity, ReviewIssue
+except ImportError:
+    # 如果新模型不可用，使用旧模型
+    Bug = BugReport
+    BugSeverity = BugStatus
+    HistoryEntry = None
+    IssueSeverity = None
+    ReviewIssue = None
+
+
+class BugRepository2(BaseRepository):
+    """Bug 存储库 (新版本)"""
+
+    def get_all_bugs(self) -> List:
+        """获取所有 Bug"""
+        if Bug is None:
+            return []
+        query = select(Bug).order_by(Bug.created_at.desc())
+        return list(self.session.scalars(query).all())
+
+    def get_by_id(self, bug_id: int) -> Optional[Bug]:
+        """根据 ID 获取 Bug"""
+        if Bug is None:
+            return None
+        return self.session.get(Bug, bug_id)
+
+    def create_bug(
+        self,
+        title: str,
+        description: Optional[str] = None,
+        severity: BugSeverity = BugSeverity.MEDIUM,
+        file_path: Optional[str] = None,
+        line_number: Optional[int] = None,
+        error_type: Optional[str] = None,
+        error_stack: Optional[str] = None,
+    ) -> Bug:
+        """创建 Bug"""
+        if Bug is None:
+            raise ValueError("Bug model not available")
+        bug = Bug(
+            title=title,
+            description=description,
+            severity=severity,
+            file_path=file_path,
+            line_number=line_number,
+            error_type=error_type,
+            error_stack=error_stack,
+        )
+        self.session.add(bug)
+        self.session.flush()
+        return bug
+
+
+class KnowledgeRepository2(BaseRepository):
+    """知识库存储库 (新版本)"""
+
+    def get_all_entries(self) -> List:
+        """获取所有知识条目"""
+        query = select(KnowledgeEntry).order_by(KnowledgeEntry.created_at.desc())
+        return list(self.session.scalars(query).all())
+
+    def get_by_id(self, entry_id: int) -> Optional[KnowledgeEntry]:
+        """根据 ID 获取条目"""
+        return self.session.get(KnowledgeEntry, entry_id)
+
+
+class HistoryRepository(BaseRepository):
+    """历史记录存储库"""
+
+    def get_all_entries(self) -> List:
+        """获取所有历史记录"""
+        if HistoryEntry is None:
+            return []
+        query = select(HistoryEntry).order_by(HistoryEntry.timestamp.desc())
+        return list(self.session.scalars(query).all())
+
+    def create_entry(
+        self,
+        operation_type: str,
+        file_path: Optional[str] = None,
+        details: Optional[str] = None,
+        code_changes: Optional[str] = None,
+    ) -> Optional[HistoryEntry]:
+        """创建历史记录"""
+        if HistoryEntry is None:
+            return None
+        entry = HistoryEntry(
+            operation_type=operation_type,
+            file_path=file_path,
+            details=details,
+            code_changes=code_changes,
+        )
+        self.session.add(entry)
+        self.session.flush()
+        return entry
+
+
+class ReviewRepository2(BaseRepository):
+    """代码审查存储库 (新版本)"""
+
+    def get_all_reviews(self) -> List:
+        """获取所有审查记录"""
+        if ReviewIssue is None:
+            return []
+        
+        # 加载审查及其关联的问题
+        query = select(CodeReview).options(
+            selectinload(CodeReview.issues)
+        ).order_by(CodeReview.review_timestamp.desc())
+        
+        return list(self.session.scalars(query).all())
+
+    def get_by_id(self, review_id: int) -> Optional[CodeReview]:
+        """根据 ID 获取审查"""
+        return self.session.get(CodeReview, review_id)

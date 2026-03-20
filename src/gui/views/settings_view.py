@@ -1,6 +1,7 @@
+# -*- coding: utf-8 -*-
 """
-设置视图
-应用程序设置界面
+Settings View
+Application settings interface
 """
 from typing import Optional, Dict, Any
 from PySide6.QtCore import Qt, Signal
@@ -14,7 +15,7 @@ from qfluentwidgets import (
     PushButton, LineEdit, ComboBox, SpinBox, 
     TextEdit, CheckBox, CardWidget, InfoBar, 
     InfoBarPosition, FluentIcon, BodyLabel, 
-    StrongBodyLabel, SwitchButton
+    StrongBodyLabel, SwitchButton, SubtitleLabel
 )
 
 import os
@@ -28,9 +29,9 @@ from ...ai.base import Message, MessageRole, AIRequestConfig
 
 
 class SettingsView(QWidget):
-    """设置视图"""
+    """Settings View"""
     
-    # 信号定义
+    # Signal definitions
     settings_changed = Signal()
     api_key_validated = Signal(bool, str)  # (is_valid, message)
     
@@ -42,57 +43,57 @@ class SettingsView(QWidget):
         self._load_settings()
     
     def _init_ui(self):
-        """初始化UI"""
+        """Initialize UI"""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
         
-        # 标题
-        title = StrongBodyLabel("设置")
+        # Title
+        title = SubtitleLabel("Settings")
         layout.addWidget(title)
         
-        # 创建选项卡
+        # Create tabs
         self.tabs = QTabWidget()
         
-        # API设置选项卡
+        # API Settings tab
         api_tab = self._create_api_tab()
-        self.tabs.addTab(api_tab, "API 设置")
+        self.tabs.addTab(api_tab, "API Settings")
         
-        # 代码分析选项卡
+        # Code Analysis tab
         analysis_tab = self._create_analysis_tab()
-        self.tabs.addTab(analysis_tab, "代码分析")
+        self.tabs.addTab(analysis_tab, "Code Analysis")
         
-        # 显示设置选项卡
+        # Display Settings tab
         display_tab = self._create_display_tab()
-        self.tabs.addTab(display_tab, "显示")
+        self.tabs.addTab(display_tab, "Display")
         
         layout.addWidget(self.tabs)
         
-        # 底部按钮
+        # Bottom buttons
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         
-        self.save_btn = PushButton("保存")
+        self.save_btn = PushButton("Save")
         self.save_btn.clicked.connect(self._save_settings)
         btn_layout.addWidget(self.save_btn)
         
         layout.addLayout(btn_layout)
     
     def _create_api_tab(self) -> QWidget:
-        """创建API设置选项卡"""
+        """Create API Settings tab"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setSpacing(15)
         
-        # AI提供商选择
+        # AI Provider selection
         provider_group = CardWidget()
         provider_layout = QVBoxLayout(provider_group)
         
-        provider_label = StrongBodyLabel("AI 提供商")
+        provider_label = StrongBodyLabel("AI Provider")
         provider_layout.addWidget(provider_label)
         
         provider_input_layout = QHBoxLayout()
-        provider_label2 = BodyLabel("提供商:")
+        provider_label2 = BodyLabel("Provider:")
         self.provider_combo = ComboBox()
         self.provider_combo.addItems(["openai", "anthropic", "claude", "ollama", "deepseek", "openrouter"])
         self.provider_combo.currentTextChanged.connect(self._on_provider_changed)
@@ -102,79 +103,79 @@ class SettingsView(QWidget):
         
         layout.addWidget(provider_group)
         
-        # API密钥设置
+        # API Key settings
         api_key_group = CardWidget()
         api_key_layout = QVBoxLayout(api_key_group)
         
-        api_key_label = StrongBodyLabel("API 密钥")
+        api_key_label = StrongBodyLabel("API Key")
         api_key_layout.addWidget(api_key_label)
         
-        # API密钥输入
+        # API Key input
         api_key_input_layout = QHBoxLayout()
-        api_key_label2 = BodyLabel("API 密钥:")
+        api_key_label2 = BodyLabel("API Key:")
         self.api_key_input = LineEdit()
         self.api_key_input.setEchoMode(QLineEdit.Password)
-        self.api_key_input.setPlaceholderText("输入您的 API 密钥...")
+        self.api_key_input.setPlaceholderText("Enter your API key...")
         api_key_input_layout.addWidget(api_key_label2)
         api_key_input_layout.addWidget(self.api_key_input, 1)
         api_key_layout.addLayout(api_key_input_layout)
         
-        # 显示/隐藏按钮
-        self.api_key_show_btn = PushButton("显示")
+        # Show/Hide button
+        self.api_key_show_btn = PushButton("Show")
         self.api_key_show_btn.setCheckable(True)
         self.api_key_show_btn.clicked.connect(self._toggle_api_key_visibility)
         api_key_layout.addWidget(self.api_key_show_btn)
         
-        # 验证按钮
-        validate_btn = PushButton("验证 API 密钥")
+        # Validate button
+        validate_btn = PushButton("Validate API Key")
         validate_btn.clicked.connect(self._validate_api_key)
         api_key_layout.addWidget(validate_btn)
         
-        # 验证结果显示
+        # Validation result display
         self.validation_result = BodyLabel()
         self.validation_result.setWordWrap(True)
         api_key_layout.addWidget(self.validation_result)
         
         layout.addWidget(api_key_group)
         
-        # Base URL 设置
+        # Base URL settings
         base_url_group = CardWidget()
         base_url_layout = QVBoxLayout(base_url_group)
         
-        base_url_label = StrongBodyLabel("Base URL (可选)")
+        base_url_label = StrongBodyLabel("Base URL (Optional)")
         base_url_layout.addWidget(base_url_label)
         
         base_url_input_layout = QHBoxLayout()
         base_url_label2 = BodyLabel("Base URL:")
         self.base_url_input = LineEdit()
-        self.base_url_input.setPlaceholderText("例如: http://localhost:11434/v1")
+        self.base_url_input.setPlaceholderText("e.g.: http://localhost:11434/v1")
         base_url_input_layout.addWidget(base_url_label2)
         base_url_input_layout.addWidget(self.base_url_input, 1)
         base_url_layout.addLayout(base_url_input_layout)
         
         layout.addWidget(base_url_group)
         
-        # 模型设置
+        # Model settings
         model_group = CardWidget()
         model_layout = QVBoxLayout(model_group)
         
-        model_label = StrongBodyLabel("模型设置")
+        model_label = StrongBodyLabel("Model Settings")
         model_layout.addWidget(model_label)
         
-        # 模型名称
+        # Model name
         model_input_layout = QHBoxLayout()
-        model_label2 = BodyLabel("模型名称:")
+        model_label2 = BodyLabel("Model Name:")
         self.model_input = LineEdit()
-        self.model_input.setPlaceholderText("例如: gpt-4, claude-3-opus-20240229")
+        self.model_input.setPlaceholderText("e.g.: gpt-4, claude-3-opus-20240229")
         model_input_layout.addWidget(model_label2)
         model_input_layout.addWidget(self.model_input, 1)
         model_layout.addLayout(model_input_layout)
         
-        # 最大Tokens - 使用下拉选择常用档位
+        # Max Tokens - use dropdown for common presets
         max_tokens_layout = QHBoxLayout()
-        max_tokens_label = BodyLabel("最大 Tokens:")
+        max_tokens_label = BodyLabel("Max Tokens:")
         self.max_tokens_combo = ComboBox()
-        # 常用档位：显示文本 -> 实际值
+        # Common presets: display text -> actual value
         self.max_tokens_options = {
             "2K (2048)": 2048,
             "4K (4096)": 4096,
@@ -185,16 +186,16 @@ class SettingsView(QWidget):
             "128K (131072)": 131072
         }
         self.max_tokens_combo.addItems(list(self.max_tokens_options.keys()))
-        self.max_tokens_combo.setCurrentIndex(1)  # 默认选中 4K
+        self.max_tokens_combo.setCurrentIndex(1)  # Default to 4K
         max_tokens_layout.addWidget(max_tokens_label)
         max_tokens_layout.addWidget(self.max_tokens_combo, 1)
         model_layout.addLayout(max_tokens_layout)
         
-        # 温度
+        # Temperature
         temp_layout = QHBoxLayout()
-        temp_label = BodyLabel("温度:")
+        temp_label = BodyLabel("Temperature:")
         self.temperature_input = SpinBox()
-        self.temperature_input.setRange(0, 20)  # 0.0 - 2.0, 存储为0-20
+        self.temperature_input.setRange(0, 20)  # 0.0 - 2.0, stored as 0-20
         self.temperature_input.setValue(7)  # 0.7
         temp_layout.addWidget(temp_label)
         temp_layout.addWidget(self.temperature_input, 1)
@@ -205,21 +206,21 @@ class SettingsView(QWidget):
         return widget
     
     def _create_analysis_tab(self) -> QWidget:
-        """创建代码分析选项卡"""
+        """Create Code Analysis tab"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setSpacing(15)
         
-        # 分析范围设置
+        # Analysis scope settings
         scope_group = CardWidget()
         scope_layout = QVBoxLayout(scope_group)
         
-        scope_label = StrongBodyLabel("分析范围")
+        scope_label = StrongBodyLabel("Analysis Scope")
         scope_layout.addWidget(scope_label)
         
-        # 最大深度
+        # Max depth
         depth_layout = QHBoxLayout()
-        depth_label = BodyLabel("最大深度:")
+        depth_label = BodyLabel("Max Depth:")
         self.max_depth_input = SpinBox()
         self.max_depth_input.setRange(1, 10)
         self.max_depth_input.setValue(3)
@@ -227,9 +228,9 @@ class SettingsView(QWidget):
         depth_layout.addWidget(self.max_depth_input, 1)
         scope_layout.addLayout(depth_layout)
         
-        # 最大文件数
+        # Max files
         files_layout = QHBoxLayout()
-        files_label = BodyLabel("最大文件数:")
+        files_label = BodyLabel("Max Files:")
         self.max_files_input = SpinBox()
         self.max_files_input.setRange(10, 1000)
         self.max_files_input.setValue(100)
@@ -239,16 +240,16 @@ class SettingsView(QWidget):
         
         layout.addWidget(scope_group)
         
-        # 文件过滤设置
+        # File filter settings
         filter_group = CardWidget()
         filter_layout = QVBoxLayout(filter_group)
         
-        filter_label = StrongBodyLabel("文件过滤")
+        filter_label = StrongBodyLabel("File Filters")
         filter_layout.addWidget(filter_label)
         
         self.exclude_patterns_input = TextEdit()
         self.exclude_patterns_input.setPlaceholderText(
-            "每行一个模式，例如:\n"
+            "One pattern per line, e.g.:\n"
             "*.log\n"
             "node_modules/*\n"
             "*.min.js"
@@ -258,22 +259,22 @@ class SettingsView(QWidget):
         
         layout.addWidget(filter_group)
         
-        # 分析选项
+        # Analysis options
         options_group = CardWidget()
         options_layout = QVBoxLayout(options_group)
         
-        options_label = StrongBodyLabel("分析选项")
+        options_label = StrongBodyLabel("Analysis Options")
         options_layout.addWidget(options_label)
         
-        self.include_comments_cb = CheckBox("包含注释")
+        self.include_comments_cb = CheckBox("Include Comments")
         self.include_comments_cb.setChecked(True)
         options_layout.addWidget(self.include_comments_cb)
         
-        self.analyze_tests_cb = CheckBox("分析测试文件")
+        self.analyze_tests_cb = CheckBox("Analyze Test Files")
         self.analyze_tests_cb.setChecked(True)
         options_layout.addWidget(self.analyze_tests_cb)
         
-        self.follow_imports_cb = CheckBox("跟随导入")
+        self.follow_imports_cb = CheckBox("Follow Imports")
         self.follow_imports_cb.setChecked(True)
         options_layout.addWidget(self.follow_imports_cb)
         
@@ -282,20 +283,20 @@ class SettingsView(QWidget):
         return widget
     
     def _create_display_tab(self) -> QWidget:
-        """创建显示设置选项卡"""
+        """Create Display Settings tab"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setSpacing(15)
         
-        # 主题设置
+        # Theme settings
         theme_group = CardWidget()
         theme_layout = QVBoxLayout(theme_group)
         
-        theme_label = StrongBodyLabel("主题")
+        theme_label = StrongBodyLabel("Theme")
         theme_layout.addWidget(theme_label)
         
         theme_input_layout = QHBoxLayout()
-        theme_label2 = BodyLabel("主题模式:")
+        theme_label2 = BodyLabel("Theme Mode:")
         self.theme_combo = ComboBox()
         self.theme_combo.addItems(["light", "dark", "auto"])
         theme_input_layout.addWidget(theme_label2)
@@ -304,25 +305,25 @@ class SettingsView(QWidget):
         
         layout.addWidget(theme_group)
         
-        # 字体设置
+        # Font settings
         font_group = CardWidget()
         font_layout = QVBoxLayout(font_group)
         
-        font_label = StrongBodyLabel("字体")
+        font_label = StrongBodyLabel("Font")
         font_layout.addWidget(font_label)
         
-        # 字体家族
+        # Font family
         font_family_layout = QHBoxLayout()
-        font_family_label = BodyLabel("字体家族:")
+        font_family_label = BodyLabel("Font Family:")
         self.font_family_input = LineEdit()
-        self.font_family_input.setPlaceholderText("例如: Consolas, Monaco")
+        self.font_family_input.setPlaceholderText("e.g.: Consolas, Monaco")
         font_family_layout.addWidget(font_family_label)
         font_family_layout.addWidget(self.font_family_input, 1)
         font_layout.addLayout(font_family_layout)
         
-        # 字体大小
+        # Font size
         font_size_layout = QHBoxLayout()
-        font_size_label = BodyLabel("字体大小:")
+        font_size_label = BodyLabel("Font Size:")
         self.font_size_input = SpinBox()
         self.font_size_input.setRange(8, 24)
         self.font_size_input.setValue(12)
@@ -332,18 +333,18 @@ class SettingsView(QWidget):
         
         layout.addWidget(font_group)
         
-        # 窗口设置
+        # Window settings
         window_group = CardWidget()
         window_layout = QVBoxLayout(window_group)
         
-        window_label = StrongBodyLabel("窗口")
+        window_label = StrongBodyLabel("Window")
         window_layout.addWidget(window_label)
         
-        self.remember_size_cb = CheckBox("记住窗口大小")
+        self.remember_size_cb = CheckBox("Remember Window Size")
         self.remember_size_cb.setChecked(True)
         window_layout.addWidget(self.remember_size_cb)
         
-        self.remember_pos_cb = CheckBox("记住窗口位置")
+        self.remember_pos_cb = CheckBox("Remember Window Position")
         self.remember_pos_cb.setChecked(True)
         window_layout.addWidget(self.remember_pos_cb)
         
@@ -352,8 +353,8 @@ class SettingsView(QWidget):
         return widget
     
     def _on_provider_changed(self, provider: str):
-        """提供商改变时的处理"""
-        # 根据提供商设置默认值
+        """Handle provider change"""
+        # Set default values based on provider
         defaults = {
             "openai": {
                 "model": "gpt-4",
@@ -386,16 +387,16 @@ class SettingsView(QWidget):
             self.base_url_input.setText(defaults[provider]["base_url"])
     
     def _toggle_api_key_visibility(self, checked: bool):
-        """切换 API 密钥可见性"""
+        """Toggle API key visibility"""
         if checked:
             self.api_key_input.setEchoMode(QLineEdit.Normal)
-            self.api_key_show_btn.setText("隐藏")
+            self.api_key_show_btn.setText("Hide")
         else:
             self.api_key_input.setEchoMode(QLineEdit.Password)
-            self.api_key_show_btn.setText("显示")
+            self.api_key_show_btn.setText("Show")
     
     def _get_provider_type(self, provider: str) -> ProviderType:
-        """将提供商字符串转换为 ProviderType"""
+        """Convert provider string to ProviderType"""
         provider_map = {
             "claude": ProviderType.CLAUDE,
             "anthropic": ProviderType.CLAUDE,
@@ -407,85 +408,85 @@ class SettingsView(QWidget):
         return provider_map.get(provider.lower(), ProviderType.CUSTOM)
     
     async def _async_validate_api_key(self, client) -> tuple[bool, str]:
-        """异步验证 API 密钥"""
+        """Async validate API key"""
         try:
-            # 构建测试消息
+            # Build test message
             messages = [
                 Message(role=MessageRole.USER, content="Hello")
             ]
             
-            # 构建请求配置
+            # Build request config
             config = AIRequestConfig(
                 max_tokens=10,
                 temperature=0.5
             )
             
-            # 发送聊天请求
+            # Send chat request
             response = await client.chat(messages, config)
             
             if response and response.content:
-                return True, "API 密钥验证成功"
+                return True, "API key validation successful"
             else:
-                return False, "API 返回空响应"
+                return False, "API returned empty response"
                 
         except Exception as e:
             error_msg = str(e)
-            # 提取关键错误信息
+            # Extract key error information
             if "AuthenticationError" in error_msg or "401" in error_msg:
-                return False, "API 密钥无效"
+                return False, "Invalid API key"
             elif "Connection" in error_msg or "Timeout" in error_msg:
-                return False, "网络连接失败"
+                return False, "Network connection failed"
             else:
-                return False, f"验证失败: {error_msg}"
+                return False, f"Validation failed: {error_msg}"
     
     def _validate_api_key(self):
-        """验证 API 密钥"""
+        """Validate API key"""
         api_key = self.api_key_input.text().strip()
         provider = self.provider_combo.currentText()
         base_url = self.base_url_input.text().strip()
         model = self.model_input.text().strip()
         
         if not api_key:
-            self.validation_result.setText("❌ 请输入 API 密钥")
+            self.validation_result.setText("Error: Please enter API key")
             InfoBar.error(
-                title="验证失败",
-                content="请输入 API 密钥",
+                title="Validation Failed",
+                content="Please enter API key",
                 parent=self,
                 position=InfoBarPosition.TOP
             )
             return
         
         if not model:
-            self.validation_result.setText("❌ 请输入模型名称")
+            self.validation_result.setText("Error: Please enter model name")
             InfoBar.error(
-                title="验证失败",
-                content="请输入模型名称",
+                title="Validation Failed",
+                content="Please enter model name",
                 parent=self,
                 position=InfoBarPosition.TOP
             )
             return
         
-        self.validation_result.setText("⏳ 正在验证...")
+        self.validation_result.setText("Validating...")
         
         try:
-            # 构建 ProviderConfig
+            # Build ProviderConfig
             provider_type = self._get_provider_type(provider)
             
             config = ProviderConfig(
                 id="temp_validation",
-                name=f"{provider} (验证)",
+                name=f"{provider} (validation)",
                 provider_type=provider_type,
                 api_key=api_key,
                 api_endpoint=base_url,
                 model=model,
-                max_tokens=10,  # 验证时使用很小的值
+                max_tokens=10,  # Use small value for validation
                 temperature=self.temperature_input.value() / 10.0
             )
             
-            # 使用工厂创建客户端
+            # Create client using factory
             client = create_ai_client(config)
             
-            # 运行异步验证
+            # Run async validation
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
@@ -493,18 +494,18 @@ class SettingsView(QWidget):
                 is_valid, message = loop.run_until_complete(self._async_validate_api_key(client))
                 
                 if is_valid:
-                    self.validation_result.setText("✅ " + message)
+                    self.validation_result.setText("Success: " + message)
                     InfoBar.success(
-                        title="验证成功",
+                        title="Validation Successful",
                         content=message,
                         parent=self,
                         position=InfoBarPosition.TOP
                     )
                     self.api_key_validated.emit(True, message)
                 else:
-                    self.validation_result.setText("❌ " + message)
+                    self.validation_result.setText("Error: " + message)
                     InfoBar.error(
-                        title="验证失败",
+                        title="Validation Failed",
                         content=message,
                         parent=self,
                         position=InfoBarPosition.TOP
@@ -514,10 +515,10 @@ class SettingsView(QWidget):
                 loop.close()
                 
         except Exception as e:
-            error_msg = f"初始化失败: {str(e)}"
-            self.validation_result.setText(f"❌ {error_msg}")
+            error_msg = f"Initialization failed: {str(e)}"
+            self.validation_result.setText(f"Error: {error_msg}")
             InfoBar.error(
-                title="初始化失败",
+                title="Initialization Failed",
                 content=str(e),
                 parent=self,
                 position=InfoBarPosition.TOP
@@ -525,13 +526,13 @@ class SettingsView(QWidget):
             self.api_key_validated.emit(False, error_msg)
     
     def _get_max_tokens_value(self) -> int:
-        """从下拉框获取最大 Tokens 值"""
+        """Get max tokens value from dropdown"""
         current_text = self.max_tokens_combo.currentText()
         return self.max_tokens_options.get(current_text, 4096)
     
     def _set_max_tokens_value(self, value: int):
-        """根据值设置下拉框选项"""
-        # 找到最接近的档位
+        """Set dropdown option based on value"""
+        # Find closest preset
         closest_text = "4K (4096)"
         min_diff = float('inf')
         
@@ -544,9 +545,9 @@ class SettingsView(QWidget):
         self.max_tokens_combo.setCurrentText(closest_text)
     
     def _load_settings(self):
-        """加载设置"""
+        """Load settings"""
         try:
-            # 加载API设置
+            # Load API settings
             api_config = self.config.get("api", {})
             self.provider_combo.setCurrentText(api_config.get("provider", "openai"))
             self.api_key_input.setText(api_config.get("api_key", ""))
@@ -556,10 +557,10 @@ class SettingsView(QWidget):
             if "max_tokens" in api_config:
                 self._set_max_tokens_value(api_config["max_tokens"])
             if "temperature" in api_config:
-                # 转换为整数存储 (0.7 -> 7)
+                # Convert to integer storage (0.7 -> 7)
                 self.temperature_input.setValue(int(api_config["temperature"] * 10))
             
-            # 加载分析设置
+            # Load analysis settings
             analysis_config = self.config.get("analysis", {})
             if "max_depth" in analysis_config:
                 self.max_depth_input.setValue(analysis_config["max_depth"])
@@ -573,7 +574,7 @@ class SettingsView(QWidget):
             self.analyze_tests_cb.setChecked(analysis_config.get("analyze_tests", True))
             self.follow_imports_cb.setChecked(analysis_config.get("follow_imports", True))
             
-            # 加载显示设置
+            # Load display settings
             display_config = self.config.get("display", {})
             self.theme_combo.setCurrentText(display_config.get("theme", "light"))
             self.font_family_input.setText(display_config.get("font_family", ""))
@@ -586,14 +587,14 @@ class SettingsView(QWidget):
             
         except Exception as e:
             InfoBar.error(
-                title="加载失败",
-                content=f"加载设置时出错: {str(e)}",
+                title="Load Failed",
+                content=f"Error loading settings: {str(e)}",
                 parent=self,
                 position=InfoBarPosition.TOP
             )
     
     def _sync_to_provider_system(self, settings: dict):
-        """同步设置到 Provider 系统"""
+        """Sync settings to Provider system"""
         try:
             api_config = settings.get("api", {})
             provider = api_config.get("provider", "openai")
@@ -603,28 +604,28 @@ class SettingsView(QWidget):
             max_tokens = api_config.get("max_tokens", 4096)
             temperature = api_config.get("temperature", 0.7)
             
-            # 如果没有 API 密钥，不更新 Provider 系统
+            # Don't update Provider system if no API key
             if not api_key:
-                print("⚠️ 未提供 API 密钥，跳过 Provider 系统同步")
+                print("Warning: No API key provided, skipping Provider system sync")
                 return
             
-            # 获取或创建默认 Provider
+            # Get or create default Provider
             provider_type = self._get_provider_type(provider)
             
-            # 尝试获取现有的默认 provider
+            # Try to get existing default provider
             existing_providers = provider_manager.get_providers()
             default_provider = None
             
-            # 查找已存在的默认提供商（id 为 "default" 或第一个）
+            # Find existing default provider (id is "default" or first one)
             for p in existing_providers:
                 if p.id == "default":
                     default_provider = p
                     break
             
-            # 构建 ProviderConfig
+            # Build ProviderConfig
             provider_config = ProviderConfig(
                 id=default_provider.id if default_provider else "default",
-                name=f"{provider.upper()} (默认)",
+                name=f"{provider.upper()} (Default)",
                 provider_type=provider_type,
                 api_key=api_key,
                 api_endpoint=base_url if base_url else "",
@@ -635,33 +636,33 @@ class SettingsView(QWidget):
                 is_enabled=True
             )
             
-            # 更新或创建 Provider
+            # Update or create Provider
             if default_provider:
                 success = provider_manager.update_provider(provider_config.id, provider_config)
                 if success:
-                    print(f"✅ 已更新默认 Provider: {provider_config.id}")
-                    # 切换到这个 provider
+                    print(f"Success: Updated default Provider: {provider_config.id}")
+                    # Switch to this provider
                     provider_manager.switch_provider(provider_config.id)
                 else:
-                    print(f"⚠️ 更新 Provider 失败")
+                    print(f"Warning: Failed to update Provider")
             else:
                 success = provider_manager.add_provider(provider_config)
                 if success:
-                    print(f"✅ 已创建默认 Provider: {provider_config.id}")
-                    # 切换到这个 provider
+                    print(f"Success: Created default Provider: {provider_config.id}")
+                    # Switch to this provider
                     provider_manager.switch_provider(provider_config.id)
                 else:
-                    print(f"⚠️ 创建 Provider 失败")
+                    print(f"Warning: Failed to create Provider")
             
         except Exception as e:
-            print(f"⚠️ 同步到 Provider 系统失败: {str(e)}")
+            print(f"Warning: Failed to sync to Provider system: {str(e)}")
             import traceback
             traceback.print_exc()
     
     def _save_settings(self):
-        """保存设置"""
+        """Save settings"""
         try:
-            # 构建设置字典
+            # Build settings dictionary
             settings = {
                 "api": {
                     "provider": self.provider_combo.currentText(),
@@ -691,27 +692,27 @@ class SettingsView(QWidget):
                 }
             }
             
-            # 保存到配置文件
+            # Save to config file
             config_service.update_config(settings)
             
-            # 🔥 关键修复：同步更新到 Provider 系统
+            # Sync to Provider system
             self._sync_to_provider_system(settings)
             
-            # 发送设置变更事件
+            # Emit settings changed event
             self.settings_changed.emit()
             
-            # 显示成功消息
+            # Show success message
             InfoBar.success(
-                title="保存成功",
-                content="设置已保存，AI 配置已同步更新。",
+                title="Save Successful",
+                content="Settings saved, AI configuration synced.",
                 parent=self,
                 position=InfoBarPosition.TOP
             )
             
         except Exception as e:
             InfoBar.error(
-                title="保存失败",
-                content=f"保存设置时出错: {str(e)}",
+                title="Save Failed",
+                content=f"Error saving settings: {str(e)}",
                 parent=self,
                 position=InfoBarPosition.TOP
             )

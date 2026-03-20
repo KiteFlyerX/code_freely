@@ -592,6 +592,61 @@ class SettingsView(QWidget):
                 position=InfoBarPosition.TOP
             )
     
+    def _sync_to_provider_system(self, settings: dict):
+        """同步设置到 Provider 系统"""
+        try:
+            api_config = settings.get("api", {})
+            provider = api_config.get("provider", "openai")
+            api_key = api_config.get("api_key", "")
+            base_url = api_config.get("base_url", "")
+            model = api_config.get("model", "")
+            max_tokens = api_config.get("max_tokens", 4096)
+            temperature = api_config.get("temperature", 0.7)
+            
+            # 如果没有 API 密钥，不更新 Provider 系统
+            if not api_key:
+                return
+            
+            # 获取或创建默认 Provider
+            provider_type = self._get_provider_type(provider)
+            
+            # 尝试获取现有的默认 provider
+            existing_providers = provider_manager.list_providers()
+            default_provider = None
+            
+            for p in existing_providers:
+                if p.is_default:
+                    default_provider = p
+                    break
+            
+            # 构建 ProviderConfig
+            provider_config = ProviderConfig(
+                id=default_provider.id if default_provider else "default",
+                name=f"{provider.upper()} (默认)",
+                provider_type=provider_type,
+                api_key=api_key,
+                api_endpoint=base_url if base_url else None,
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                is_default=True
+            )
+            
+            # 更新或创建 Provider
+            if default_provider:
+                provider_manager.update_provider(provider_config.id, provider_config)
+                print(f"✅ 已更新默认 Provider: {provider_config.id}")
+            else:
+                provider_manager.add_provider(provider_config)
+                print(f"✅ 已创建默认 Provider: {provider_config.id}")
+            
+            # 重新加载 Provider 以确保更改生效
+            provider_manager.reload_providers()
+            
+        except Exception as e:
+            print(f"⚠️ 同步到 Provider 系统失败: {str(e)}")
+            # 不抛出异常，避免影响主流程
+    
     def _save_settings(self):
         """保存设置"""
         try:
@@ -628,13 +683,16 @@ class SettingsView(QWidget):
             # 保存到配置文件
             config_service.update_config(settings)
             
+            # 🔥 关键修复：同步更新到 Provider 系统
+            self._sync_to_provider_system(settings)
+            
             # 发送设置变更事件
             self.settings_changed.emit()
             
             # 显示成功消息
             InfoBar.success(
                 title="保存成功",
-                content="设置已保存，部分设置可能需要重启应用后生效。",
+                content="设置已保存，AI 配置已同步更新。",
                 parent=self,
                 position=InfoBarPosition.TOP
             )

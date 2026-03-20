@@ -3,14 +3,14 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "codetraceai"
+name = "code_freely"
 version = "0.1.0"
 description = "AI 编程辅助与知识沉淀工具"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 authors = [
-    {name = "CodeTraceAI Team"}
+    {name = "CodeFreely Team"}
 ]
 keywords = ["ai", "coding", "assistant", "knowledge", "claude"]
 classifiers = [
@@ -53,12 +53,12 @@ dev = [
 ]
 
 [project.scripts]
-codetrace = "codetrace.cli:cli"
+codefreely = "codetrace.cli:cli"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/codetraceai"
-Repository = "https://github.com/yourusername/codetraceai"
-Issues = "https://github.com/yourusername/codetraceai/issues"
+Homepage = "https://github.com/yourusername/code_freely"
+Repository = "https://github.com/yourusername/code_freely"
+Issues = "https://github.com/yourusername/code_freely/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

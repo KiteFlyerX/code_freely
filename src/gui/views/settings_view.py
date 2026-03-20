@@ -605,17 +605,19 @@ class SettingsView(QWidget):
             
             # 如果没有 API 密钥，不更新 Provider 系统
             if not api_key:
+                print("⚠️ 未提供 API 密钥，跳过 Provider 系统同步")
                 return
             
             # 获取或创建默认 Provider
             provider_type = self._get_provider_type(provider)
             
             # 尝试获取现有的默认 provider
-            existing_providers = provider_manager.list_providers()
+            existing_providers = provider_manager.get_providers()
             default_provider = None
             
+            # 查找已存在的默认提供商（id 为 "default" 或第一个）
             for p in existing_providers:
-                if p.is_default:
+                if p.id == "default":
                     default_provider = p
                     break
             
@@ -625,27 +627,36 @@ class SettingsView(QWidget):
                 name=f"{provider.upper()} (默认)",
                 provider_type=provider_type,
                 api_key=api_key,
-                api_endpoint=base_url if base_url else None,
+                api_endpoint=base_url if base_url else "",
                 model=model,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                is_default=True
+                is_active=True,
+                is_enabled=True
             )
             
             # 更新或创建 Provider
             if default_provider:
-                provider_manager.update_provider(provider_config.id, provider_config)
-                print(f"✅ 已更新默认 Provider: {provider_config.id}")
+                success = provider_manager.update_provider(provider_config.id, provider_config)
+                if success:
+                    print(f"✅ 已更新默认 Provider: {provider_config.id}")
+                    # 切换到这个 provider
+                    provider_manager.switch_provider(provider_config.id)
+                else:
+                    print(f"⚠️ 更新 Provider 失败")
             else:
-                provider_manager.add_provider(provider_config)
-                print(f"✅ 已创建默认 Provider: {provider_config.id}")
-            
-            # 重新加载 Provider 以确保更改生效
-            provider_manager.reload_providers()
+                success = provider_manager.add_provider(provider_config)
+                if success:
+                    print(f"✅ 已创建默认 Provider: {provider_config.id}")
+                    # 切换到这个 provider
+                    provider_manager.switch_provider(provider_config.id)
+                else:
+                    print(f"⚠️ 创建 Provider 失败")
             
         except Exception as e:
             print(f"⚠️ 同步到 Provider 系统失败: {str(e)}")
-            # 不抛出异常，避免影响主流程
+            import traceback
+            traceback.print_exc()
     
     def _save_settings(self):
         """保存设置"""

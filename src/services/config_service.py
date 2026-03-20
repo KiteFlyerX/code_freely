@@ -15,7 +15,7 @@ from ..database.repositories import ConfigRepository
 class AIConfig:
     """AI 配置"""
     provider: str = "claude"  # claude, openai, deepseek
-    model: str = "claude-sonnet-4-6"
+    model: str = "claude-3-5-sonnet-20241022"  # 修复为正确的模型名称
     api_key: str = ""
     base_url: str = ""  # API 请求地址（可选，用于自定义端点）
     temperature: float = 0.7

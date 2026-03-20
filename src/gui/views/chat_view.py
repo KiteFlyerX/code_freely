@@ -3,12 +3,12 @@
 AI 对话界面
 """
 from typing import Optional
-from PySide6.QtCore import Qt, Signal, QThread, QObject, QEvent
+from PySide6.QtCore import Qt, Signal, QThread, QObject, QEvent, QTimer, QPropertyAnimation, Property
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
-    QFrame, QLabel, QSizePolicy, QApplication
+    QFrame, QLabel, QSizePolicy, QApplication, QGraphicsOpacityEffect
 )
-from PySide6.QtGui import QTextDocument, QTextCursor, QKeySequence, QShortcut
+from PySide6.QtGui import QTextDocument, QTextCursor, QKeySequence, QShortcut, QFont
 from qfluentwidgets import (
     TextEdit, PlainTextEdit, PushButton,
     ComboBox, BodyLabel, StrongBodyLabel, ScrollArea,
@@ -44,6 +44,67 @@ class MessageEdit(PlainTextEdit):
             super().keyPressEvent(event)
 
 
+class ThinkingIndicator(QWidget):
+    """思考中动画指示器"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._dots = 0
+        self._setup_ui()
+        
+        # 动画定时器
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._update_animation)
+        
+    def _setup_ui(self):
+        """设置界面"""
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(8)
+        
+        # 图标和文字
+        icon_label = QLabel("🤔")
+        icon_label.setFont(QFont("Segoe UI Emoji", 16))
+        layout.addWidget(icon_label)
+        
+        self.text_label = StrongBodyLabel("AI 思考中")
+        self.text_label.setStyleSheet("color: #0078d4;")
+        layout.addWidget(self.text_label)
+        
+        # 动态点
+        self.dots_label = BodyLabel("")
+        self.dots_label.setStyleSheet("color: #0078d4;")
+        layout.addWidget(self.dots_label)
+        
+        layout.addStretch()
+        
+        # 设置整体样式
+        self.setStyleSheet("""
+            ThinkingIndicator {
+                background-color: #e3f2fd;
+                border-radius: 12px;
+                border: 2px solid #0078d4;
+            }
+        """)
+        
+    def start_animation(self):
+        """开始动画"""
+        self._dots = 0
+        self.timer.start(400)  # 每400ms更新一次
+        self.show()
+        
+    def stop_animation(self):
+        """停止动画"""
+        self.timer.stop()
+        self.hide()
+        
+    def _update_animation(self):
+        """更新动画"""
+        self._dots = (self._dots + 1) % 4
+        dots = "." * self._dots
+        self.dots_label.setText(dots)
+
+
 class ChatWorker(QObject):
     """聊天工作线程"""
     response_received = Signal(str)
@@ -56,6 +117,11 @@ class ChatWorker(QObject):
         self.conversation_id = conversation_id
         self.content = content
         self.work_dir = work_dir
+        self._is_cancelled = False
+
+    def cancel(self):
+        """取消任务"""
+        self._is_cancelled = True
 
     def run(self):
         """运行聊天任务"""
@@ -71,6 +137,8 @@ class ChatWorker(QObject):
                 async for chunk in conversation_service.send_message_with_tools(
                     self.conversation_id, self.content, self.work_dir
                 ):
+                    if self._is_cancelled:
+                        break
                     full_response += chunk
                 return full_response
 
@@ -79,11 +147,13 @@ class ChatWorker(QObject):
             loop.run_until_complete(loop.shutdown_asyncgens())
             loop.close()
 
-            self.response_received.emit(full_response)
+            if not self._is_cancelled:
+                self.response_received.emit(full_response)
         except Exception as e:
             import traceback
             traceback.print_exc()
-            self.error_occurred.emit(str(e))
+            if not self._is_cancelled:
+                self.error_occurred.emit(str(e))
         finally:
             self.finished.emit()
 
@@ -249,6 +319,14 @@ class ChatView(QWidget):
         button_layout.addWidget(self.status_label)
 
         button_layout.addStretch()
+
+        # 停止按钮（初始隐藏）
+        self.stop_btn = PushButton("停止")
+        self.stop_btn.setIcon(FluentIcon.CANCEL)
+        self.stop_btn.clicked.connect(self._stop_generation)
+        self.stop_btn.setVisible(False)
+        self.stop_btn.setStyleSheet("background-color: #d13438; color: white;")
+        button_layout.addWidget(self.stop_btn)
 
         self.send_btn = PushButton("发送")
         self.send_btn.clicked.connect(self._send_message)
@@ -422,6 +500,9 @@ class ChatView(QWidget):
         # 禁用发送按钮
         self._set_processing(True)
 
+        # 显示思考动画
+        self._show_thinking_indicator()
+
         # 创建工作线程
         self._thread = QThread()
         self._worker = ChatWorker(self.conversation_id, content, self.work_dir)
@@ -439,8 +520,43 @@ class ChatView(QWidget):
         # 启动线程
         self._thread.start()
 
+    def _stop_generation(self):
+        """停止生成"""
+        if hasattr(self, '_worker') and self._worker:
+            self._worker.cancel()
+        
+        # 隐藏思考动画
+        self._hide_thinking_indicator()
+        
+        # 添加取消提示
+        cancel_label = BodyLabel("⚠️ 生成已取消")
+        cancel_label.setStyleSheet("color: #d13438; font-style: italic; padding: 8px; background: #ffebee; border-radius: 8px;")
+        self.messages_layout.addWidget(cancel_label)
+        self._scroll_to_bottom()
+        
+        # 重置状态
+        self._set_processing(False)
+
+    def _show_thinking_indicator(self):
+        """显示思考动画"""
+        # 创建或显示思考指示器
+        if not hasattr(self, 'thinking_indicator'):
+            self.thinking_indicator = ThinkingIndicator()
+            self.messages_layout.addWidget(self.thinking_indicator)
+        
+        self.thinking_indicator.start_animation()
+        self._scroll_to_bottom()
+
+    def _hide_thinking_indicator(self):
+        """隐藏思考动画"""
+        if hasattr(self, 'thinking_indicator') and self.thinking_indicator:
+            self.thinking_indicator.stop_animation()
+
     def _on_tool_call(self, tool_info: str):
         """工具调用处理"""
+        # 隐藏思考动画（如果有工具调用，说明思考阶段结束）
+        self._hide_thinking_indicator()
+        
         # 显示工具调用信息
         tool_label = BodyLabel(f"[工具调用] {tool_info}")
         tool_label.setStyleSheet("color: #666; font-style: italic; padding: 4px 8px; background: #f0f0f0; border-radius: 4px;")
@@ -449,6 +565,9 @@ class ChatView(QWidget):
 
     def _on_response_received(self, response: str):
         """响应接收处理"""
+        # 隐藏思考动画
+        self._hide_thinking_indicator()
+        
         # 添加 AI 消息气泡
         self._add_message_bubble("assistant", response)
 
@@ -457,6 +576,9 @@ class ChatView(QWidget):
 
     def _on_error(self, error: str):
         """错误处理"""
+        # 隐藏思考动画
+        self._hide_thinking_indicator()
+        
         # 分析错误类型并提供更友好的提示
         error_msg = str(error)
 
@@ -517,6 +639,10 @@ class ChatView(QWidget):
             item = self.messages_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+        
+        # 重置思考指示器
+        if hasattr(self, 'thinking_indicator'):
+            self.thinking_indicator = None
 
     def _scroll_to_bottom(self):
         """滚动到底部"""
@@ -528,6 +654,7 @@ class ChatView(QWidget):
         self._is_processing = processing
         self.send_btn.setEnabled(not processing)
         self.input_edit.setEnabled(not processing)
+        self.stop_btn.setVisible(processing)  # 显示/隐藏停止按钮
 
         if processing:
             self.send_btn.setText("思考中...")

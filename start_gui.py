@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-CodeTraceAI GUI 启动脚本
+CodeFreely GUI 启动脚本
 支持自动重启功能
 """
 import sys
@@ -18,9 +18,9 @@ app = QApplication.instance()
 if app is None:
     app = QApplication(sys.argv)
 
-app.setApplicationName("CodeTraceAI")
-app.setApplicationDisplayName("CodeTraceAI")
-app.setOrganizationName("CodeTraceAI")
+app.setApplicationName("CodeFreely")
+app.setApplicationDisplayName("CodeFreely")
+app.setOrganizationName("CodeFreely")
 
 # 初始化数据库
 from src.database import init_database

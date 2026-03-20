@@ -1,6 +1,6 @@
 """
 主窗口
-CodeTraceAI GUI 主窗口
+CodeFreely GUI 主窗口
 """
 from typing import Optional
 from PySide6.QtCore import Qt, Signal, QObject, QThread
@@ -41,7 +41,7 @@ class MainWindow(FluentWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("CodeTraceAI - AI 编程辅助与知识沉淀工具")
+        self.setWindowTitle("CodeFreely - AI 编程辅助与知识沉淀工具")
         self.setMinimumSize(1200, 800)
 
         # 初始化主题
@@ -128,7 +128,7 @@ class MainWindow(FluentWindow):
     def _show_welcome(self):
         """显示欢迎信息"""
         InfoBar.success(
-            title="欢迎使用 CodeTraceAI",
+            title="欢迎使用 CodeFreely",
             content="AI 编程辅助与知识沉淀工具已就绪",
             orient=Qt.Horizontal,
             isClosable=True,
@@ -296,8 +296,8 @@ def run_gui():
         app = QApplication(sys.argv)
 
     # 设置应用程序元数据
-    app.setApplicationName("CodeTraceAI")
-    app.setOrganizationName("CodeTraceAI")
+    app.setApplicationName("CodeFreely")
+    app.setOrganizationName("CodeFreely")
     
     # 设置字体以支持中文
     from PySide6.QtGui import QFontDatabase

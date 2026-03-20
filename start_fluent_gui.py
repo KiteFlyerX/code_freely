@@ -1,5 +1,5 @@
 """
-CodeTraceAI GUI - 使用 PyQt-Fluent-Widgets 美化版本
+CodeFreely GUI - 使用 PyQt-Fluent-Widgets 美化版本
 使用 FluentWindow 和 qfluentwidgets 组件
 """
 import sys
@@ -27,7 +27,7 @@ from qfluentwidgets import (
 from PySide6.QtCore import Qt, Signal, QEvent, QTimer
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QStackedWidget, QApplication, QFileDialog, QHeaderView
+    QStackedWidget, QApplication, QFileDialog, QHeaderView, QLabel
 )
 from PySide6.QtGui import QFont, QTextCursor, QKeyEvent
 
@@ -381,7 +381,7 @@ class ChatWidget(QWidget):
             )
             self.chat_area.clear()
             self.chat_area.append(f"--- 新对话 (ID: {self.chat_conversation_id}) ---")
-            self.chat_area.append("\n欢迎使用 CodeTraceAI！\n")
+            self.chat_area.append("\n欢迎使用 CodeFreely！\n")
             self.chat_area.append("配置提示: 请在「设置」页面中添加 AI 提供商配置\n")
             InfoBar.success(
                 title="新对话已创建",
@@ -734,7 +734,7 @@ class MainWindow(FluentWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("CodeTraceAI - AI 编程辅助工具")
+        self.setWindowTitle("CodeFreely - AI 编程辅助工具")
         self.setMinimumSize(1200, 800)
 
         # 初始化主题
@@ -782,7 +782,7 @@ class MainWindow(FluentWindow):
         )
 
         # 设置窗口图标
-        self.setWindowTitle("CodeTraceAI")
+        self.setWindowTitle("CodeFreely")
 
     def _init_theme(self):
         """初始化主题"""
@@ -801,8 +801,8 @@ class MainWindow(FluentWindow):
 def main():
     """主函数"""
     app = QApplication(sys.argv)
-    app.setApplicationName("CodeTraceAI")
-    app.setOrganizationName("CodeTraceAI")
+    app.setApplicationName("CodeFreely")
+    app.setOrganizationName("CodeFreely")
 
     # 设置应用样式
     app.setStyle("Fusion")

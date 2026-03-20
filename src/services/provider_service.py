@@ -316,6 +316,90 @@ class ProviderManager:
         finally:
             session.close()
 
+    def get_ccswitch_active_provider(self) -> Optional[ProviderConfig]:
+        """
+        从 cc-switch 导入的活动提供商（兼容方法）
+        这个方法主要用于从旧的 cc-switch 配置导入
+        如果没有 cc-switch 配置，返回 None
+        """
+        try:
+            import sqlite3
+            import os
+            from pathlib import Path
+
+            # 查找 cc-switch 数据库
+            possible_paths = [
+                Path.home() / ".cc-switch" / "cc-switch.db",
+                Path(os.environ.get("APPDATA", "")) / "cc-switch" / "cc-switch.db",
+                Path(os.environ.get("LOCALAPPDATA", "")) / "cc-switch" / "cc-switch.db",
+            ]
+
+            db_path = None
+            for path in possible_paths:
+                if path.exists():
+                    db_path = path
+                    break
+
+            if not db_path:
+                return None
+
+            # 连接数据库并获取活动提供商
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            # 获取活动提供商
+            cursor.execute("""
+                SELECT id, app_type, name, settings_config, website_url
+                FROM providers
+                WHERE is_active = 1
+                LIMIT 1
+            """)
+
+            row = cursor.fetchone()
+            conn.close()
+
+            if not row:
+                return None
+
+            # 解析配置
+            settings = json.loads(row["settings_config"])
+            env = settings.get("env", {})
+
+            # 提取 API 密钥
+            api_key = env.get("ANTHROPIC_AUTH_TOKEN") or env.get("OPENAI_API_KEY") or env.get("DEEPSEEK_API_KEY", "")
+
+            if not api_key:
+                return None
+
+            # 提取基础 URL
+            base_url = env.get("ANTHROPIC_BASE_URL", "")
+
+            # 提取模型
+            model = env.get("ANTHROPIC_MODEL") or env.get("OPENAI_MODEL") or env.get("DEEPSEEK_MODEL", "")
+
+            # 确定提供商类型
+            provider_type = ProviderType.CUSTOM
+            if row["app_type"] == "claude":
+                provider_type = ProviderType.CLAUDE
+            elif row["app_type"] == "openai":
+                provider_type = ProviderType.OPENAI
+            elif row["app_type"] == "deepseek":
+                provider_type = ProviderType.DEEPSEEK
+
+            return ProviderConfig(
+                id=f"ccswitch_{row['id']}",
+                name=row["name"],
+                provider_type=provider_type,
+                api_key=api_key,
+                api_endpoint=base_url,
+                model=model,
+            )
+
+        except Exception as e:
+            # cc-switch 不可用或出错，返回 None
+            return None
+
     def _set_config(self, key: str, value: str):
         """设置配置项（带重试机制）"""
         import time

@@ -291,12 +291,25 @@ class ChatWidget(QWidget):
     def _check_provider(self):
         """检查提供商配置"""
         try:
-            provider = provider_manager.get_ccswitch_active_provider()
-            is_from_ccswitch = True
-
-            if not provider:
-                provider = provider_manager.get_active_provider()
+            provider = None
+            # 先尝试从 cc-switch 获取
+            try:
+                provider = provider_manager.get_ccswitch_active_provider()
+                is_from_ccswitch = True
+            except Exception as e:
+                print(f"获取 cc-switch 提供商失败: {e}")
+                provider = None
                 is_from_ccswitch = False
+
+            # 如果没有找到，从数据库获取
+            if not provider:
+                try:
+                    provider = provider_manager.get_active_provider()
+                    is_from_ccswitch = False
+                except Exception as e:
+                    print(f"获取活动提供商失败: {e}")
+                    provider = None
+                    is_from_ccswitch = False
 
             if provider:
                 has_valid_key = bool(provider.api_key and not provider.api_key.startswith("test"))
@@ -439,15 +452,21 @@ class ChatWidget(QWidget):
 
     def _hide_thinking_indicator(self):
         """隐藏思考动画"""
-        if hasattr(self, '_thinking_timer'):
+        if hasattr(self, '_thinking_timer') and self._thinking_timer is not None:
             self._thinking_timer.stop()
-            
+
             # 删除思考中的文本
-            cursor = self.chat_area.textCursor()
-            cursor.movePosition(QTextCursor.End)
-            cursor.select(QTextCursor.LineUnderCursor)
-            cursor.removeSelectedText()
-            cursor.deletePreviousChar()  # 删除换行符
+            try:
+                cursor = self.chat_area.textCursor()
+                cursor.movePosition(QTextCursor.End)
+                cursor.select(QTextCursor.LineUnderCursor)
+                selected_text = cursor.selectedText()
+                # 只删除思考动画行，避免误删其他内容
+                if "思考中" in selected_text or "AI 思考中" in selected_text:
+                    cursor.removeSelectedText()
+                    cursor.deletePreviousChar()  # 删除换行符
+            except Exception as e:
+                print(f"隐藏思考动画时出错: {e}")  # 调试输出
 
     def _on_send(self):
         """发送消息"""
@@ -530,14 +549,23 @@ class ChatWidget(QWidget):
                         self._hide_thinking_indicator()
                         # 实时显示流式内容
                         chunk = result.get("content", "")
-                        # 移动光标到末尾并插入文本
-                        cursor = self.chat_area.textCursor()
-                        cursor.movePosition(QTextCursor.End)
-                        self.chat_area.setTextCursor(cursor)
-                        self.chat_area.insertPlainText(chunk)
+                        if chunk:  # 只显示非空内容
+                            # 移动光标到末尾并插入文本
+                            cursor = self.chat_area.textCursor()
+                            cursor.movePosition(QTextCursor.End)
+                            self.chat_area.setTextCursor(cursor)
+                            self.chat_area.insertPlainText(chunk)
+                            # 自动滚动到底部
+                            scrollbar = self.chat_area.verticalScrollBar()
+                            scrollbar.setValue(scrollbar.maximum())
                     elif result.get("status") == "error":
                         self._hide_thinking_indicator()
-                        self.chat_area.append(f"\n[错误] {result.get('data', '')}")
+                        error_msg = result.get('data', 'Unknown error')
+                        print(f"[Chat Error] {error_msg}")  # 调试输出
+                        self.chat_area.append(f"\n[错误] {error_msg}")
+                        self._set_processing(False)
+                        self.chat_input.setFocus()
+                        return  # 错误后返回，不再继续轮询
             except queue.Empty:
                 QTimer.singleShot(10, check_result)
 
@@ -780,6 +808,10 @@ class MainWindow(FluentWindow):
             self.settings_widget, FluentIcon.SETTING, "设置",
             position=NavigationItemPosition.BOTTOM
         )
+
+        # 连接设置变化信号到聊天组件的提供商刷新
+        if hasattr(self.settings_widget, 'settings_changed'):
+            self.settings_widget.settings_changed.connect(self.chat_widget._check_provider)
 
         # 设置窗口图标
         self.setWindowTitle("CodeFreely")

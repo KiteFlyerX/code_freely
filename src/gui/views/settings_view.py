@@ -589,45 +589,34 @@ class SettingsView(QWidget):
         self.max_tokens_combo.setCurrentText(closest_text)
 
     def _load_settings(self):
-        """Load settings"""
+        """Load settings from AppConfig object"""
         try:
-            # Load API settings
-            api_config = self.config.get("api", {})
-            self.provider_combo.setCurrentText(api_config.get("provider", "openai"))
-            self.api_key_input.setText(api_config.get("api_key", ""))
-            self.base_url_input.setText(api_config.get("base_url", ""))
-            self.model_input.setText(api_config.get("model", ""))
+            # Load API settings from AppConfig.ai
+            ai_config = self.config.ai
+            self.provider_combo.setCurrentText(ai_config.provider)
+            self.api_key_input.setText(ai_config.api_key)
+            self.base_url_input.setText(ai_config.base_url)
+            self.model_input.setText(ai_config.model)
+            self._set_max_tokens_value(ai_config.max_tokens)
+            self.temperature_input.setValue(int(ai_config.temperature * 10))
 
-            if "max_tokens" in api_config:
-                self._set_max_tokens_value(api_config["max_tokens"])
-            if "temperature" in api_config:
-                # Convert to integer storage (0.7 -> 7)
-                self.temperature_input.setValue(int(api_config["temperature"] * 10))
-
-            # Load analysis settings
-            analysis_config = self.config.get("analysis", {})
-            if "max_depth" in analysis_config:
-                self.max_depth_input.setValue(analysis_config["max_depth"])
-            if "max_files" in analysis_config:
-                self.max_files_input.setValue(analysis_config["max_files"])
-
-            exclude_patterns = analysis_config.get("exclude_patterns", [])
-            self.exclude_patterns_input.setPlainText("\n".join(exclude_patterns))
-
-            self.include_comments_cb.setChecked(analysis_config.get("include_comments", True))
-            self.analyze_tests_cb.setChecked(analysis_config.get("analyze_tests", True))
-            self.follow_imports_cb.setChecked(analysis_config.get("follow_imports", True))
-
-            # Load display settings
-            display_config = self.config.get("display", {})
-            self.theme_combo.setCurrentText(display_config.get("theme", "light"))
-            self.font_family_input.setText(display_config.get("font_family", ""))
-
-            if "font_size" in display_config:
-                self.font_size_input.setValue(display_config["font_size"])
-
-            self.remember_size_cb.setChecked(display_config.get("remember_size", True))
-            self.remember_pos_cb.setChecked(display_config.get("remember_position", True))
+            # Load display settings from AppConfig
+            self.theme_combo.setCurrentText(self.config.theme)
+            
+            # For analysis settings, use defaults since they're not in AppConfig
+            # These can be stored separately if needed
+            self.max_depth_input.setValue(3)
+            self.max_files_input.setValue(100)
+            self.exclude_patterns_input.setPlainText("")
+            self.include_comments_cb.setChecked(True)
+            self.analyze_tests_cb.setChecked(True)
+            self.follow_imports_cb.setChecked(True)
+            
+            # Font settings (use defaults for now)
+            self.font_family_input.setText("")
+            self.font_size_input.setValue(12)
+            self.remember_size_cb.setChecked(True)
+            self.remember_pos_cb.setChecked(True)
 
         except Exception as e:
             InfoBar.error(

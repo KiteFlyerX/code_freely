@@ -1,6 +1,7 @@
 """
 Bug 视图
 Bug 列表和详情界面（带折叠功能）
+使用 BugReport 模型
 """
 from typing import Optional, List
 from PySide6.QtCore import Qt, Signal, QSize
@@ -16,7 +17,7 @@ from qfluentwidgets import (
 )
 
 from ...database.repositories import BugRepository
-from ...database.models import Bug, BugSeverity
+from ...models import BugReport, BugStatus
 
 
 class CollapsibleCard(CardWidget):
@@ -88,7 +89,7 @@ class CollapsibleCard(CardWidget):
 class BugCard(CollapsibleCard):
     """Bug 卡片"""
     
-    def __init__(self, bug: Bug, parent=None):
+    def __init__(self, bug: BugReport, parent=None):
         title = f"#{bug.id} - {bug.title}"
         super().__init__(title, parent)
         self.bug = bug
@@ -96,20 +97,16 @@ class BugCard(CollapsibleCard):
     
     def _setup_content(self):
         """设置内容"""
-        # 严重程度
-        severity_colors = {
-            BugSeverity.CRITICAL: "#d13438",
-            BugSeverity.HIGH: "#ff6b35",
-            BugSeverity.MEDIUM: "#ffaa00",
-            BugSeverity.LOW: "#0078d4"
+        # 状态
+        status_colors = {
+            BugStatus.PENDING: "#666666",
+            BugStatus.IN_PROGRESS: "#0078d4",
+            BugStatus.FIXED: "#107c10",
+            BugStatus.CLOSED: "#999999"
         }
         
-        severity_label = BodyLabel(f"严重程度: {self.bug.severity.value}")
-        severity_label.setStyleSheet(f"color: {severity_colors.get(self.bug.severity, '#000')}; font-weight: bold;")
-        self.add_content(severity_label)
-        
-        # 状态
-        status_label = BodyLabel(f"状态: {self.bug.status.value}")
+        status_label = BodyLabel(f"状态: {self._get_status_display()}")
+        status_label.setStyleSheet(f"color: {status_colors.get(self.bug.status, '#000')}; font-weight: bold;")
         self.add_content(status_label)
         
         # 描述
@@ -118,16 +115,28 @@ class BugCard(CollapsibleCard):
             desc_label.setWordWrap(True)
             self.add_content(desc_label)
         
-        # 文件路径
-        if self.bug.file_path:
-            file_label = BodyLabel(f"文件: {self.bug.file_path}")
-            file_label.setStyleSheet("color: #666;")
-            self.add_content(file_label)
+        # 错误类型
+        if self.bug.error_type:
+            error_type_label = BodyLabel(f"错误类型: {self.bug.error_type}")
+            error_type_label.setStyleSheet("color: #d13438;")
+            self.add_content(error_type_label)
         
-        # 代码位置
-        if self.bug.line_number:
-            line_label = BodyLabel(f"行号: {self.bug.line_number}")
-            self.add_content(line_label)
+        # 修复描述
+        if self.bug.fix_description:
+            fix_label = BodyLabel(f"修复方案: {self.bug.fix_description}")
+            fix_label.setWordWrap(True)
+            fix_label.setStyleSheet("color: #107c10;")
+            self.add_content(fix_label)
+    
+    def _get_status_display(self) -> str:
+        """获取状态显示文本"""
+        status_map = {
+            BugStatus.PENDING: "待处理",
+            BugStatus.IN_PROGRESS: "进行中",
+            BugStatus.FIXED: "已修复",
+            BugStatus.CLOSED: "已关闭"
+        }
+        return status_map.get(self.bug.status, self.bug.status.value)
 
 
 class BugView(QWidget):
@@ -140,7 +149,7 @@ class BugView(QWidget):
         super().__init__(parent)
         self.setObjectName("bugView")
         
-        self.bugs: List[Bug] = []
+        self.bugs: List[BugReport] = []
         self._setup_ui()
         self._load_bugs()
     
@@ -185,13 +194,6 @@ class BugView(QWidget):
         layout.addWidget(self.search_edit)
         
         # 筛选
-        layout.addWidget(BodyLabel("严重程度:"))
-        self.severity_combo = ComboBox()
-        self.severity_combo.addItems(["全部", "严重", "高", "中", "低"])
-        self.severity_combo.setCurrentIndex(0)
-        self.severity_combo.currentIndexChanged.connect(self._on_filter_changed)
-        layout.addWidget(self.severity_combo)
-        
         layout.addWidget(BodyLabel("状态:"))
         self.status_combo = ComboBox()
         self.status_combo.addItems(["全部", "待处理", "进行中", "已修复", "已关闭"])
@@ -258,18 +260,31 @@ class BugView(QWidget):
         
         # 获取筛选条件
         search_text = self.search_edit.text().lower()
-        severity_filter = self.severity_combo.currentText()
         status_filter = self.status_combo.currentText()
+        
+        # 状态映射
+        status_map = {
+            "待处理": BugStatus.PENDING,
+            "进行中": BugStatus.IN_PROGRESS,
+            "已修复": BugStatus.FIXED,
+            "已关闭": BugStatus.CLOSED
+        }
         
         # 筛选并添加 Bug 卡片
         for bug in self.bugs:
             # 应用筛选条件
-            if severity_filter != "全部" and bug.severity.value != severity_filter:
-                continue
-            if status_filter != "全部" and bug.status.value != status_filter:
-                continue
-            if search_text and search_text not in bug.title.lower() and bug.description:
-                if search_text not in bug.description.lower():
+            if status_filter != "全部":
+                filter_status = status_map.get(status_filter)
+                if bug.status != filter_status:
+                    continue
+            
+            if search_text:
+                match = False
+                if search_text in bug.title.lower():
+                    match = True
+                if bug.description and search_text in bug.description.lower():
+                    match = True
+                if not match:
                     continue
             
             bug_card = BugCard(bug)

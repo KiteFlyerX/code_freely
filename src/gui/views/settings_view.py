@@ -185,9 +185,14 @@ class SettingsView(QWidget):
 
         self._validation_thread = None
         self._validation_worker = None
-        
+
         self._save_thread = None
         self._save_worker = None
+
+        # 存储实际的 API Key（用于显示/隐藏切换）
+        self._actual_api_key = ""
+        # 标志：防止程序化设置文本时触发 textChanged
+        self._is_setting_text_programmatically = False
 
         self._init_ui()
         self._load_settings()
@@ -228,6 +233,9 @@ class SettingsView(QWidget):
         btn_layout.addWidget(self.save_btn)
 
         layout.addLayout(btn_layout)
+
+        # 连接 API Key 输入框的文本变化信号
+        self.api_key_input.textChanged.connect(self._on_api_key_changed)
 
     def _create_api_tab(self) -> QWidget:
         """Create API Settings tab"""
@@ -536,14 +544,30 @@ class SettingsView(QWidget):
             self.model_input.setText(defaults[provider]["model"])
             self.base_url_input.setText(defaults[provider]["base_url"])
 
+    def _on_api_key_changed(self, text: str):
+        """当用户修改 API Key 输入框时更新实际值"""
+        # 如果是程序化设置文本，不处理
+        if self._is_setting_text_programmatically:
+            return
+        # 如果用户输入的不是掩码，说明用户在修改，更新实际值
+        if text != "********":
+            self._actual_api_key = text
+
     def _toggle_api_key_visibility(self, checked: bool):
         """Toggle API key visibility"""
+        self._is_setting_text_programmatically = True
         if checked:
+            # 显示实际的 API Key
+            self.api_key_input.setText(self._actual_api_key)
             self.api_key_input.setEchoMode(QLineEdit.Normal)
             self.api_key_show_btn.setText("Hide")
         else:
+            # 隐藏时显示掩码（如果有实际值）
+            if self._actual_api_key:
+                self.api_key_input.setText("********")
             self.api_key_input.setEchoMode(QLineEdit.Password)
             self.api_key_show_btn.setText("Show")
+        self._is_setting_text_programmatically = False
 
     def _get_provider_type(self, provider: str) -> ProviderType:
         """Convert provider string to ProviderType"""
@@ -591,7 +615,11 @@ class SettingsView(QWidget):
 
     def _validate_api_key(self):
         """Validate API key"""
-        api_key = self.api_key_input.text().strip()
+        # 获取 API Key：如果输入框是掩码，使用实际保存的值
+        current_input = self.api_key_input.text()
+        api_key = current_input if current_input != "********" else self._actual_api_key
+
+        api_key = api_key.strip()
         provider = self.provider_combo.currentText()
         base_url = self.base_url_input.text().strip()
         model = self.model_input.text().strip()
@@ -691,7 +719,14 @@ class SettingsView(QWidget):
             # Load API settings from AppConfig.ai
             ai_config = self.config.ai
             self.provider_combo.setCurrentText(ai_config.provider)
-            self.api_key_input.setText(ai_config.api_key)
+            # API Key 不直接显示，保存实际值到内部变量，显示掩码
+            self._actual_api_key = ai_config.api_key
+            self._is_setting_text_programmatically = True
+            if self._actual_api_key:
+                self.api_key_input.setText("********")  # 显示掩码
+            else:
+                self.api_key_input.setText("")
+            self._is_setting_text_programmatically = False
             self.base_url_input.setText(ai_config.base_url)
             self.model_input.setText(ai_config.model)
             self._set_max_tokens_value(ai_config.max_tokens)
@@ -761,11 +796,15 @@ class SettingsView(QWidget):
             # 禁用保存按钮，防止重复点击
             self.save_btn.setEnabled(False)
 
+            # 获取 API Key：如果输入框是掩码，使用实际保存的值
+            current_input = self.api_key_input.text()
+            api_key_to_save = current_input if current_input != "********" else self._actual_api_key
+
             # Build settings dictionary
             settings = {
                 "api": {
                     "provider": self.provider_combo.currentText(),
-                    "api_key": self.api_key_input.text(),
+                    "api_key": api_key_to_save,
                     "base_url": self.base_url_input.text(),
                     "model": self.model_input.text(),
                     "max_tokens": self._get_max_tokens_value(),
@@ -796,7 +835,7 @@ class SettingsView(QWidget):
 
             # Sync to Provider system in background thread (异步操作，避免卡死UI)
             provider = self.provider_combo.currentText()
-            
+
             # 创建工作线程
             self._save_thread = QThread()
             self._save_worker = SettingsSaveWorker(settings, provider)
@@ -812,7 +851,7 @@ class SettingsView(QWidget):
         except Exception as e:
             # 恢复按钮状态
             self.save_btn.setEnabled(True)
-            
+
             InfoBar.error(
                 title="Save Failed",
                 content=f"Error saving settings: {str(e)}",

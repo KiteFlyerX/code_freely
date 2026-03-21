@@ -762,7 +762,7 @@ class MainWindow(FluentWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("CodeFreely - AI 编程辅助工具")
+        self.setWindowTitle("AI辅助编程")
         self.setMinimumSize(1200, 800)
 
         # 初始化主题
@@ -812,9 +812,6 @@ class MainWindow(FluentWindow):
         # 连接设置变化信号到聊天组件的提供商刷新
         if hasattr(self.settings_widget, 'settings_changed'):
             self.settings_widget.settings_changed.connect(self.chat_widget._check_provider)
-
-        # 设置窗口图标
-        self.setWindowTitle("CodeFreely")
 
     def _init_theme(self):
         """初始化主题"""

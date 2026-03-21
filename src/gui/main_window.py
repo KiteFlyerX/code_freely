@@ -41,7 +41,7 @@ class MainWindow(FluentWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("CodeFreely - AI 编程辅助与知识沉淀工具")
+        self.setWindowTitle("AI辅助编程")
         self.setMinimumSize(1200, 800)
 
         # 初始化主题
@@ -128,8 +128,8 @@ class MainWindow(FluentWindow):
     def _show_welcome(self):
         """显示欢迎信息"""
         InfoBar.success(
-            title="欢迎使用 CodeFreely",
-            content="AI 编程辅助与知识沉淀工具已就绪",
+            title="欢迎使用 AI辅助编程",
+            content="AI 编程辅助工具已就绪",
             orient=Qt.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,

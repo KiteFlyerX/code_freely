@@ -111,6 +111,9 @@ class MainWindow(FluentWindow):
         # 知识库视图信号
         self.knowledge_view.entryCreated.connect(self._on_entry_created)
 
+        # 设置视图信号
+        self.settings_view.settings_changed.connect(self._on_settings_changed)
+
     def _init_config(self):
         """初始化配置"""
         # 验证 API 密钥
@@ -188,6 +191,22 @@ class MainWindow(FluentWindow):
             duration=3000,
             parent=self
         )
+
+    def _on_settings_changed(self):
+        """设置更改事件处理 - 重新加载主题"""
+        self._reload_theme()
+
+    def _reload_theme(self):
+        """重新加载主题"""
+        cfg = config_service.get_config()
+
+        if cfg.theme == "dark":
+            setTheme(Theme.DARK)
+        elif cfg.theme == "light":
+            setTheme(Theme.LIGHT)
+        else:
+            # 自动检测
+            setTheme(Theme.AUTO)
 
     def _suggest_knowledge_extraction(self, data: dict):
         """建议提取知识"""
